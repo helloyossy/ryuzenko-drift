@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- v0.7 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<!-- v0.8 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
 <meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="龍涎香ドリフト">
@@ -69,7 +69,9 @@
 
   .list{ width:min(460px,92vw); display:flex; flex-direction:column; gap:9px; margin-bottom:18px; max-height:62vh; overflow-y:auto; padding:2px;}
   .grid{ width:min(520px,94vw); display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:18px; max-height:62vh; overflow-y:auto; padding:2px;}
-  .gx{ border:1px solid rgba(217,184,119,.2); border-radius:3px; padding:11px 13px; background:rgba(12,24,44,.7); text-align:left;}
+  .gx{ border:1px solid rgba(217,184,119,.2); border-radius:3px; padding:11px 12px; background:rgba(12,24,44,.7); text-align:left; display:flex; align-items:center; gap:11px;}
+  .gthumb{ width:56px; height:56px; flex:0 0 56px; }
+  .gtext{ min-width:0; }
   .gx .gn{ font-family:var(--serif); font-size:13.5px; line-height:1.4; margin-bottom:4px;}
   .gx .gs{ color:var(--gold); font-size:12px; letter-spacing:1px;}
   .gx .gp{ font-size:10.5px; opacity:.6; margin-top:2px;}
@@ -426,6 +428,26 @@ const MOOD={
   shinkai:{ray:0.12,snow:'#9fd8ff',snowA:0.7,biolum:1.0,caustic:0,tint:'rgba(0,8,26,0.20)',pad:[65.41,98.0,146.83],whale:0.16},
 };
 const RSUB={kuroshio:'黒潮の本流へ',amami:'珊瑚の島の海',okinawa:'光あふれる浅瀬',tokunoshima:'月明かりの環礁',chiba:'暮らしに近い海',shinkai:'光届かぬ深み'};
+const DOMTINT={moon:'159,182,255',sun:'240,182,90',weed:'120,210,160',salt:'200,224,255',microbe:'84,203,184',whale:'255,207,102'};
+function drawPearlThumb(x,S,v){
+  const cx=S/2, cy=S/2, pr=S*0.32, grade=v.grade==null?0.4:v.grade, pure=v.pure==null?1:v.pure, tint=DOMTINT[v.dom]||'200,224,255';
+  x.clearRect(0,0,S,S);
+  let a=x.createRadialGradient(cx,cy,pr*0.5,cx,cy,pr*1.8); a.addColorStop(0,'rgba('+tint+',0.38)'); a.addColorStop(1,'rgba('+tint+',0)');
+  x.fillStyle=a; x.beginPath(); x.arc(cx,cy,pr*1.8,0,6.28); x.fill();
+  let pg=x.createRadialGradient(cx-pr*0.32,cy-pr*0.32,pr*0.2,cx,cy,pr);
+  pg.addColorStop(0,'#fbf4e4'); pg.addColorStop(1,'rgb('+Math.round(168-grade*78)+','+Math.round(146-grade*72)+','+Math.round(116-grade*62)+')');
+  x.fillStyle=pg; x.beginPath(); x.arc(cx,cy,pr,0,6.28); x.fill();
+  x.lineWidth=1.2; x.strokeStyle='rgba(217,184,119,0.75)'; x.stroke();
+  const rings=Math.max(1,(v.stars||1)-1); x.globalAlpha=0.25;
+  for(let k=1;k<=rings;k++){ x.beginPath(); x.arc(cx,cy,pr*(k/(rings+1)),0,6.28); x.strokeStyle='rgb(120,100,80)'; x.lineWidth=0.7; x.stroke(); }
+  x.globalAlpha=1;
+  let sp=x.createRadialGradient(cx-pr*0.34,cy-pr*0.34,0,cx-pr*0.34,cy-pr*0.34,pr*0.45);
+  sp.addColorStop(0,'rgba(255,255,255,0.85)'); sp.addColorStop(1,'rgba(255,255,255,0)');
+  x.fillStyle=sp; x.beginPath(); x.arc(cx-pr*0.34,cy-pr*0.34,pr*0.45,0,6.28); x.fill();
+  if(pure<0.7){ x.globalAlpha=(1-pure)*0.55; for(let i=0;i<5;i++){ x.beginPath(); x.arc(cx+Math.sin(i*2)*pr*0.5,cy+Math.cos(i*3)*pr*0.5,1.4,0,6.28); x.fillStyle='#352718'; x.fill(); } x.globalAlpha=1; }
+  if(v.whale){ x.strokeStyle='rgba(255,243,208,0.9)'; x.lineWidth=1;
+    for(let k=0;k<4;k++){ const an=k/4*6.28+0.6; x.beginPath(); x.moveTo(cx+Math.cos(an)*pr*1.15,cy+Math.sin(an)*pr*1.15); x.lineTo(cx+Math.cos(an)*pr*1.55,cy+Math.sin(an)*pr*1.55); x.stroke(); } }
+}
 function drawWhale(x,y,sc,al,dir){
   ctx.save(); ctx.translate(x,y); ctx.scale(dir*sc,sc); ctx.globalAlpha=al;
   ctx.fillStyle='rgba(20,32,54,0.9)';
@@ -568,7 +590,8 @@ function generateScent(good){
   const notes=[]; entries.forEach(([k,v])=>{ if(v>0)notes.push(nw[k]); }); if(G.murk>40)notes.push('かすかな濁り'); if(!notes.length)notes.push('海の気配');
   const pl=G.region.places, place=good?pl[Math.min(pl.length-1,Math.floor(G.absorbed/30))]:'濁った入り江';
   const state=!good?'濁りきって沈んだ':(wh>0&&pure>0.7?'鯨の記憶を抱いた、伝説の香り':(pure>0.85&&G.absorbed>60?'静かに深まった、稀有な香り':(pure>0.6?'まろやかに整った香り':'荒れた海を越えてきた香り')));
-  return {name,stars,note:notes.join('、'),place,state,region:G.region.name};
+  const vis={dom, grade:Math.min(1,G.absorbed/130), pure, whale:wh>0, stars};
+  return {name,stars,note:notes.join('、'),place,state,region:G.region.name,vis};
 }
 
 // ===================== SCREENS =====================
@@ -603,8 +626,12 @@ function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementB
   if(!keys.length){ const e=document.createElement('div'); e.className='gx empty'; e.textContent='まだ香りを見つけていない'; e.style.gridColumn='1/3'; box.appendChild(e); return; }
   keys.map(k=>SAVE.codex[k]).map((v,i)=>({v,name:keys[i]})).sort((a,b)=>b.v.stars-a.v.stars).forEach(({v,name})=>{
     const d=document.createElement('div'); d.className='gx';
-    d.innerHTML='<div class="gn">'+name+'</div><div class="gs">'+'★'.repeat(v.stars)+'☆'.repeat(5-v.stars)+'</div><div class="gp">'+(v.place||'')+'｜'+(v.region||'')+'</div>';
-    box.appendChild(d); }); }
+    const cvn=document.createElement('canvas'); cvn.width=120; cvn.height=120; cvn.className='gthumb';
+    const vis=v.vis||{dom:'salt',grade:Math.min(1,(v.stars||1)/5),pure:1,whale:false,stars:v.stars||1};
+    drawPearlThumb(cvn.getContext('2d'),120,vis);
+    const tx=document.createElement('div'); tx.className='gtext';
+    tx.innerHTML='<div class="gn">'+name+'</div><div class="gs">'+'★'.repeat(v.stars)+'☆'.repeat(5-v.stars)+'</div><div class="gp">'+(v.place||'')+'｜'+(v.region||'')+'</div>';
+    d.appendChild(cvn); d.appendChild(tx); box.appendChild(d); }); }
 
 // ===================== START / END =====================
 function startGame(){ initAudio(); newGame(selRegion); startPad(); G.running=true;
@@ -617,7 +644,7 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
   const grade=Math.min(1,G.absorbed/130);
   const earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4)));
   SAVE.essence+=earned;
-  const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region};
+  const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region,vis:s.vis};
   SAVE.tutDone=1; save();
   document.getElementById('endTitle').textContent=good?'漂着しました':'濁ってしまった…';
   document.getElementById('sName').textContent=s.name;
