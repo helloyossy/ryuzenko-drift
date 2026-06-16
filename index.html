@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>龍涎香ドリフト prototype v0.4</title>
+<style>
+  :root{
+    --gold:#d9b877; --gold-soft:#e8d3a4; --ink:#eef3fb; --glass:rgba(8,18,34,.82);
+    --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Times New Roman",serif;
+    --sans:-apple-system,"Hiragino Sans","Yu Gothic",sans-serif;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#030b18; font-family:var(--sans); color:var(--ink); }
+  #wrap { position:relative; width:100vw; height:100vh; touch-action:none; }
+  canvas#cv { display:block; width:100%; height:100%; }
+
+  #hud { position:absolute; top:0; left:0; right:0; padding:12px 16px; pointer-events:none; z-index:5; }
+  .bar { height:8px; border-radius:5px; background:rgba(255,255,255,.10); overflow:hidden; margin-top:5px; }
+  .bar > i { display:block; height:100%; width:0%; transition:width .1s linear; }
+  #xpFill { background:linear-gradient(90deg,#8fd6e8,#cdb6e0); }
+  #murkFill { background:linear-gradient(90deg,#c9a86a,#6e3522); }
+  .row { display:flex; justify-content:space-between; font-size:11px; opacity:.8; letter-spacing:.12em; text-transform:none; }
+  #topInfo { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; letter-spacing:.06em; }
+  #lvl { font-weight:600; font-size:15px; transition:transform .12s; color:var(--gold-soft); }
+  #clock { font-variant-numeric:tabular-nums; opacity:.85; }
+  #combo { position:absolute; top:104px; left:0; right:0; text-align:center; font-family:var(--serif);
+           font-weight:600; font-size:32px; letter-spacing:.14em; color:var(--gold-soft);
+           text-shadow:0 0 22px rgba(217,184,119,.55); opacity:0; transition:opacity .2s; pointer-events:none; z-index:5;}
+
+  .panel { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+           background:radial-gradient(ellipse at 50% 35%,rgba(10,22,42,.72),rgba(3,9,20,.92));
+           backdrop-filter:blur(6px); text-align:center; padding:26px; z-index:10; overflow-y:auto; }
+  .panel.hidden { display:none; }
+  h1 { font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:.18em; margin-bottom:6px; }
+  h1 .small{ font-size:19px; letter-spacing:.12em; }
+  .tag { font-size:11px; letter-spacing:.42em; color:var(--gold); opacity:.85; margin-bottom:14px; text-indent:.42em;}
+  .sub { font-size:13px; opacity:.66; max-width:440px; line-height:1.9; margin-bottom:24px; }
+  .btn { pointer-events:auto; cursor:pointer; border:1px solid rgba(217,184,119,.5); border-radius:2px;
+         padding:13px 30px; font-size:14px; font-weight:600; letter-spacing:.16em; margin:5px;
+         color:#1a1206; background:linear-gradient(180deg,#e8d3a4,#cda85f); box-shadow:0 6px 22px rgba(120,90,30,.3); }
+  .btn.ghost { color:var(--gold-soft); background:transparent; box-shadow:none; }
+  .btn:active { transform:translateY(1px); }
+  .essence{ font-size:13px; letter-spacing:.1em; color:var(--gold-soft); margin:4px 0 18px; }
+  .essence b{ font-size:20px; font-family:var(--serif); }
+
+  #upPanel .cards { display:flex; flex-direction:column; gap:11px; width:min(440px,90vw); }
+  .card { pointer-events:auto; cursor:pointer; border:1px solid rgba(217,184,119,.22); border-radius:3px; padding:15px 18px;
+          background:rgba(14,28,50,.78); text-align:left; transition:transform .08s, border-color .15s, background .15s; }
+  .card:active { transform:scale(.985); }
+  .card:hover { border-color:rgba(217,184,119,.6); background:rgba(20,38,64,.85); }
+  .card .ttl { font-size:15px; font-weight:600; letter-spacing:.04em; margin-bottom:3px; }
+  .card .dsc { font-size:11.5px; opacity:.66; line-height:1.6; }
+  .card .ico { margin-right:9px; opacity:.9; }
+  .card.locked{ opacity:.5; }
+  .card .meta{ float:right; font-size:11px; color:var(--gold-soft); letter-spacing:.05em;}
+
+  .list{ width:min(460px,92vw); display:flex; flex-direction:column; gap:9px; margin-bottom:18px; max-height:62vh; overflow-y:auto; padding:2px;}
+  .grid{ width:min(520px,94vw); display:grid; grid-template-columns:1fr 1fr; gap:9px; margin-bottom:18px; max-height:62vh; overflow-y:auto; padding:2px;}
+  .gx{ border:1px solid rgba(217,184,119,.2); border-radius:3px; padding:11px 13px; background:rgba(12,24,44,.7); text-align:left;}
+  .gx .gn{ font-family:var(--serif); font-size:13.5px; line-height:1.4; margin-bottom:4px;}
+  .gx .gs{ color:var(--gold); font-size:12px; letter-spacing:1px;}
+  .gx .gp{ font-size:10.5px; opacity:.6; margin-top:2px;}
+  .gx.empty{ opacity:.35; font-size:11px; display:flex; align-items:center; justify-content:center; min-height:54px;}
+
+  #scent { width:min(440px,92vw); background:linear-gradient(180deg,rgba(18,34,60,.92),rgba(10,20,38,.92));
+           border:1px solid rgba(217,184,119,.42); border-radius:4px; padding:24px 22px; margin-bottom:18px; text-align:left;
+           box-shadow:0 10px 40px rgba(0,0,0,.4);}
+  #scent .name { font-family:var(--serif); font-size:22px; font-weight:600; letter-spacing:.04em; margin-bottom:10px; line-height:1.5; }
+  #scent .line { font-size:12.5px; opacity:.82; margin:4px 0; letter-spacing:.03em; }
+  #scent .stars { color:var(--gold); font-size:19px; letter-spacing:4px; margin:10px 0; }
+  #earned{ font-size:12.5px; color:var(--gold-soft); letter-spacing:.08em; margin-bottom:16px;}
+  .hint { position:absolute; bottom:14px; left:0; right:0; text-align:center; font-size:10.5px; opacity:.35; pointer-events:none; z-index:5; letter-spacing:.05em;}
+  .back{ margin-top:4px; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="cv"></canvas>
+
+  <div id="hud">
+    <div id="topInfo"><span id="lvl">Lv.1</span><span id="regionName">黒潮</span><span id="clock">90"</span></div>
+    <div class="row"><span>熟成</span></div>
+    <div class="bar"><i id="xpFill"></i></div>
+    <div class="row"><span>濁り</span><span id="murkPct">0%</span></div>
+    <div class="bar"><i id="murkFill"></i></div>
+  </div>
+  <div id="combo"></div>
+  <div class="hint">指でなぞる / マウスで龍涎香を動かす</div>
+
+  <!-- HOME -->
+  <div id="homePanel" class="panel">
+    <div class="tag">RYUZENKO DRIFT</div>
+    <h1>龍涎香ドリフト</h1>
+    <div class="essence">熟成エキス &nbsp;<b id="homeEssence">0</b></div>
+    <div class="sub" id="homeRegion">海域：黒潮</div>
+    <div>
+      <button class="btn" id="goBtn">漂い出す</button>
+    </div>
+    <div style="margin-top:6px">
+      <button class="btn ghost" id="regionBtn">海域</button>
+      <button class="btn ghost" id="shopBtn">強化</button>
+      <button class="btn ghost" id="codexBtn">香り図鑑</button>
+    </div>
+  </div>
+
+  <!-- REGION -->
+  <div id="regionPanel" class="panel hidden">
+    <h1 class="small">海域を選ぶ</h1>
+    <div class="essence">熟成エキス &nbsp;<b id="regionEssence">0</b></div>
+    <div class="list" id="regionList"></div>
+    <button class="btn ghost back" data-home>もどる</button>
+  </div>
+
+  <!-- SHOP -->
+  <div id="shopPanel" class="panel hidden">
+    <h1 class="small">永続強化</h1>
+    <div class="essence">熟成エキス &nbsp;<b id="shopEssence">0</b></div>
+    <div class="list" id="shopList"></div>
+    <button class="btn ghost back" data-home>もどる</button>
+  </div>
+
+  <!-- CODEX -->
+  <div id="codexPanel" class="panel hidden">
+    <h1 class="small">香り図鑑</h1>
+    <div class="essence">発見した香り &nbsp;<b id="codexCount">0</b></div>
+    <div class="grid" id="codexGrid"></div>
+    <button class="btn ghost back" data-home>もどる</button>
+  </div>
+
+  <!-- LEVEL UP -->
+  <div id="upPanel" class="panel hidden">
+    <h1 class="small">熟成 — 強化を選ぶ</h1>
+    <div class="cards" id="cards"></div>
+  </div>
+
+  <!-- RESULT -->
+  <div id="endPanel" class="panel hidden">
+    <h1 class="small" id="endTitle">漂着しました</h1>
+    <div id="scent">
+      <div class="name" id="sName">—</div>
+      <div class="stars" id="sStars">★</div>
+      <div class="line" id="sNote">ノート：—</div>
+      <div class="line" id="sPlace">漂着地：—</div>
+      <div class="line" id="sState">状態：—</div>
+    </div>
+    <div id="earned">熟成エキス +0</div>
+    <div>
+      <button class="btn" id="againBtn">もう一度</button>
+      <button class="btn ghost" id="shareBtn">シェア画像</button>
+      <button class="btn ghost" id="homeBtn2">ホームへ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let W=0,H=0,DPR=1;
+function resize(){ DPR=Math.min(window.devicePixelRatio||1,2); W=innerWidth; H=innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR; ctx.setTransform(DPR,0,0,DPR,0,0); }
+addEventListener('resize',resize); resize();
+
+// ===================== SAVE =====================
+const SAVE_KEY='drift_save_v1';
+function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}}; }
+let SAVE; try{ SAVE=Object.assign(def(),JSON.parse(localStorage.getItem(SAVE_KEY))||{}); SAVE.perks=Object.assign(def().perks,SAVE.perks||{}); }catch(e){ SAVE=def(); }
+function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE)); }catch(e){} }
+
+// ===================== DATA =====================
+const REGIONS=[
+  {id:'kuroshio',name:'黒潮',cost:0,   top:[12,32,60], places:['黒潮の縁','黒潮本流','潮目'],            bias:{}},
+  {id:'amami',   name:'奄美',cost:90,  top:[14,42,54], places:['奄美の浜','加計呂麻','大島海峡'],         bias:{weed:1.6,salt:1.3}, pollMul:1.1},
+  {id:'okinawa', name:'沖縄',cost:240, top:[8,48,60],  places:['沖縄本島','慶良間の海','宮古の浜'],       bias:{sun:1.6,salt:1.3}, pollMul:1.2},
+  {id:'tokunoshima',name:'徳之島',cost:460,top:[16,34,50],places:['徳之島','犬の門蓋','金見崎'],          bias:{moon:1.6,weed:1.3}, pollMul:1.25},
+  {id:'chiba',   name:'千葉',cost:760, top:[20,28,42], places:['九十九里','館山','犬吠埼'],               bias:{salt:1.3,microbe:1.5}, pollMul:1.45},
+  {id:'shinkai', name:'深海',cost:1300,top:[5,11,26],  places:['深海平原','熱水噴出域','海溝の縁'],       bias:{moon:1.7,microbe:1.7}, pollMul:1.3},
+];
+const rById=id=>REGIONS.find(r=>r.id===id)||REGIONS[0];
+
+const PERKS=[
+  {id:'ring0',  name:'初期吸引リング', dsc:'開始時の吸引範囲が広がる', max:5, ico:'◎',  cost:l=>30+l*30, eff:l=>'+'+(l*6)+'%'},
+  {id:'murkres',name:'濁り耐性',       dsc:'汚染ダメージを軽減',       max:5, ico:'🛡', cost:l=>40+l*40, eff:l=>'-'+(l*8)+'%'},
+  {id:'xp0',    name:'熟成効率',       dsc:'EXP獲得量が増える',         max:5, ico:'⏱', cost:l=>40+l*35, eff:l=>'+'+(l*6)+'%'},
+  {id:'essence0',name:'熟成エキス',    dsc:'エキス獲得量が増える',     max:5, ico:'✨', cost:l=>50+l*50, eff:l=>'+'+(l*10)+'%'},
+  {id:'shield0',name:'初期シールド',   dsc:'開始時にシールドを持つ',   max:3, ico:'🌿', cost:l=>90+l*90, eff:l=>l+'枚'},
+];
+
+const MATS={
+  moon:{label:'月光',color:'#cfe0ff',glow:'#8fb6ff',r:7},
+  sun:{label:'太陽',color:'#ffe0a0',glow:'#f0b65a',r:7},
+  weed:{label:'海藻',color:'#9ce0bb',glow:'#4fb585',r:8},
+  salt:{label:'塩',color:'#ffffff',glow:'#cfe6ff',r:5},
+  microbe:{label:'微生物',color:'#a8f0e4',glow:'#54cbb8',r:5},
+};
+const POLL={
+  plastic:{label:'プラ',color:'#d85f5f',r:10,murk:14},
+  oil:{label:'油膜',color:'#352b44',r:15,murk:10},
+  storm:{label:'嵐',color:'#7e93b0',r:21,murk:8},
+};
+const MILE=[15,35,60,90,130];
+const PENTA=[0,3,5,7,10,12,15,17,19,22,24,27]; // minor pentatonic, always pleasant
+let selRegion = SAVE.regions[SAVE.regions.length-1] || 'kuroshio';
+const TT=90;
+
+// ===================== AUDIO (premium) =====================
+let AC=null, master=null, reverb=null, pad=null;
+function makeIR(dur,decay){ const rate=AC.sampleRate, len=Math.floor(rate*dur), buf=AC.createBuffer(2,len,rate);
+  for(let c=0;c<2;c++){ const d=buf.getChannelData(c); for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay); }
+  return buf; }
+function initAudio(){
+  if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return; }
+    master=AC.createGain(); master.gain.value=0.5; master.connect(AC.destination);
+    reverb=AC.createConvolver(); reverb.buffer=makeIR(2.6,2.4);
+    const rg=AC.createGain(); rg.gain.value=0.55; reverb.connect(rg); rg.connect(master); }
+  if(AC.state==='suspended') AC.resume();
+}
+function bell(freq,dur,gain){ if(!AC)return; const t=AC.currentTime;
+  [[1,1],[2.01,0.35],[3,0.12]].forEach(([mul,amp])=>{ const o=AC.createOscillator(), g=AC.createGain();
+    o.type='sine'; o.frequency.value=freq*mul;
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(gain*amp,t+0.014); g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(master); g.connect(reverb); o.start(t); o.stop(t+dur+0.05); }); }
+function sAbsorb(combo){ const semi=PENTA[Math.min(combo-1,PENTA.length-1)]||0; bell(523.25*Math.pow(2,semi/12),0.7,0.075); }
+function sLevel(){ [0,3,7,12].forEach((s,i)=>setTimeout(()=>bell(523.25*Math.pow(2,s/12),1.0,0.085),i*70)); }
+function sGrow(){ bell(392,1.1,0.08); }
+function sArrive(){ [0,4,7,11,14].forEach((s,i)=>setTimeout(()=>bell(392*Math.pow(2,s/12),1.8,0.08),i*90)); }
+function sHit(){ if(!AC)return; const t=AC.currentTime; const o=AC.createOscillator(), g=AC.createGain(), lp=AC.createBiquadFilter();
+  lp.type='lowpass'; lp.frequency.value=420; o.type='sine'; o.frequency.setValueAtTime(190,t); o.frequency.exponentialRampToValueAtTime(72,t+0.3);
+  g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(0.16,t+0.012); g.gain.exponentialRampToValueAtTime(0.0001,t+0.34);
+  o.connect(g); g.connect(lp); lp.connect(master); lp.connect(reverb); o.start(t); o.stop(t+0.4); }
+function startPad(){ if(!AC)return; stopPad(); const t=AC.currentTime; const pg=AC.createGain();
+  pg.gain.setValueAtTime(0.0001,t); pg.gain.linearRampToValueAtTime(0.045,t+3.5); pg.connect(reverb); pg.connect(master);
+  const arr=[130.81,196.0,261.63]; pad={osc:[],gain:pg};
+  arr.forEach((f,i)=>{ const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f; o.detune.value=(i-1)*5; o.connect(pg); o.start(); pad.osc.push(o); }); }
+function stopPad(){ if(!pad)return; const t=AC.currentTime; try{ pad.gain.gain.cancelScheduledValues(t); pad.gain.gain.setValueAtTime(pad.gain.gain.value,t);
+  pad.gain.gain.exponentialRampToValueAtTime(0.0001,t+1.3); }catch(e){} pad.osc.forEach(o=>{try{o.stop(t+1.4);}catch(e){}}); pad=null; }
+
+// ===================== GAME STATE =====================
+let G, target={x:0,y:0};
+function newGame(regionId){
+  const R=rById(regionId), P=SAVE.perks;
+  G={ running:false,t:0, region:R,
+    x:W/2,y:H/2, px:W/2,py:H/2,
+    baseR:14, grow:0, displayR:14,
+    ring:96*(1+P.ring0*0.06), speed:0.13,
+    xp:0,xpNext:6,level:1, murk:0, murkMul:1-P.murkres*0.08,
+    shield:P.shield0, cleanse:0, moonPull:1, xpMult:1+P.xp0*0.06,
+    essenceMul:1+P.essence0*0.10, pollMul:R.pollMul||1,
+    combo:0,comboT:0,
+    mats:[],polls:[],parts:[],pops:[],trail:[],
+    counts:{moon:0,sun:0,weed:0,salt:0,microbe:0}, absorbed:0,
+    spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0, ended:false };
+  target.x=W/2; target.y=H/2;
+}
+function targetR(){ return G.baseR + Math.sqrt(G.grow)*2.7; }
+
+function edgePos(m){ const e=Math.floor(Math.random()*4);
+  if(e===0)return{x:-m,y:Math.random()*H}; if(e===1)return{x:W+m,y:Math.random()*H};
+  if(e===2)return{x:Math.random()*W,y:-m}; return{x:Math.random()*W,y:H+m}; }
+function spawnMat(){
+  const base={microbe:0.10,moon:0.22,salt:0.22,weed:0.24,sun:0.22}, bias=G.region.bias||{};
+  let tot=0, w={}; for(const k in base){ w[k]=base[k]*(bias[k]||1); tot+=w[k]; }
+  let r=Math.random()*tot, k='sun'; for(const key in w){ if(r<w[key]){k=key;break;} r-=w[key]; }
+  const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5)*1.2, sp=0.2+Math.random()*0.3;
+  G.mats.push({type:k,x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,pv:0,pop:0,...MATS[k]});
+}
+function spawnPoll(){ const keys=Object.keys(POLL), k=keys[Math.floor(Math.random()*keys.length)];
+  const p=edgePos(30), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5), sp=0.25+Math.random()*0.4+G.t*0.002;
+  G.polls.push({type:k,x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,hit:false,...POLL[k]}); }
+
+// ===================== UPGRADES (in-run) =====================
+const UPGRADES=[
+  {ico:'◎',ttl:'吸引リング拡大',dsc:'素材を吸い込む範囲が広がる。汎用的に強い。',apply:()=>G.ring*=1.22},
+  {ico:'🌙',ttl:'月光特化',dsc:'月光の吸引力UP・深みが増す。神秘ビルド。',apply:()=>G.moonPull*=1.6},
+  {ico:'🌊',ttl:'黒潮ブースト',dsc:'移動が速くなる。汚染を避けやすい。',apply:()=>G.speed=Math.min(0.27,G.speed*1.25)},
+  {ico:'✨',ttl:'浄化フィールド',dsc:'濁りが時間でゆっくり減る。耐久型。',apply:()=>G.cleanse+=0.7},
+  {ico:'🌿',ttl:'海藻シールド',dsc:'汚染ダメージを3回まで無効化する。',apply:()=>G.shield+=3},
+  {ico:'⏱',ttl:'微生物加速',dsc:'熟成（EXP獲得）が速くなる。雪だるま式。',apply:()=>G.xpMult*=1.35},
+];
+function offerUpgrades(){ G.running=false;
+  const pool=[...UPGRADES].sort(()=>Math.random()-0.5).slice(0,3), box=document.getElementById('cards'); box.innerHTML='';
+  pool.forEach(u=>{ const d=document.createElement('div'); d.className='card';
+    d.innerHTML='<div class="ttl"><span class="ico">'+u.ico+'</span>'+u.ttl+'</div><div class="dsc">'+u.dsc+'</div>';
+    d.onclick=()=>{ u.apply(); show(null); G.running=true; last=performance.now(); requestAnimationFrame(loop); };
+    box.appendChild(d); });
+  show('upPanel');
+}
+
+// ===================== FX =====================
+function burst(x,y,color,n,spd){ for(let i=0;i<n;i++){ const a=Math.random()*6.28,s=(spd||2)*(0.4+Math.random());
+  G.parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:1,color,r:1.4+Math.random()*1.8}); } }
+function pop(x,y,text,color,big){ G.pops.push({x,y,text,color,life:1,vy:-0.8,size:big?22:13}); }
+function ringFx(x,y,color){ G.parts.push({ringR:6,ringMax:130,x,y,life:1,color,isRing:true}); }
+
+function setT(x,y){ target.x=x; target.y=y; }
+cv.addEventListener('mousemove',e=>setT(e.clientX,e.clientY));
+cv.addEventListener('touchstart',e=>{const t=e.touches[0];setT(t.clientX,t.clientY);},{passive:true});
+cv.addEventListener('touchmove',e=>{const t=e.touches[0];setT(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+
+// ===================== LOOP =====================
+let last=0;
+function loop(now){ if(!G.running)return; const dt=Math.min(50,now-last); last=now; update(dt/16.67,dt/1000); render(); if(G.running)requestAnimationFrame(loop); }
+
+function update(f,ds){
+  G.t+=ds; G.px=G.x; G.py=G.y;
+  G.x+=(target.x-G.x)*G.speed*f; G.y+=(target.y-G.y)*G.speed*f;
+  const dx=G.x-G.px, dy=G.y-G.py, spd=Math.hypot(dx,dy), stretch=Math.min(0.32,spd*0.011);
+  G.scaleX+=((1+stretch)-G.scaleX)*0.2*f; G.scaleY+=((1-stretch*0.7)-G.scaleY)*0.2*f;
+  G.displayR+=(targetR()-G.displayR)*0.14*f; G.bump*=Math.pow(0.86,f); if(G.levelFlash>0)G.levelFlash-=ds;
+  G.trail.push({x:G.x,y:G.y}); if(G.trail.length>14)G.trail.shift();
+  if(G.comboT>0){ G.comboT-=ds; if(G.comboT<=0){ G.combo=0; updateCombo(); } }
+
+  G.spawnT-=ds; G.pollT-=ds;
+  if(G.spawnT<=0){ spawnMat(); G.spawnT=0.42; }
+  if(G.pollT<=0){ spawnPoll(); G.pollT=Math.max(0.5,1.6-G.t*0.012)/G.pollMul; }
+
+  const pr=G.displayR;
+  for(let i=G.mats.length-1;i>=0;i--){ const m=G.mats[i];
+    const mx=G.x-m.x, my=G.y-m.y, dist=Math.hypot(mx,my)||0.01, pull=(m.type==='moon')?G.ring*G.moonPull:G.ring;
+    if(m.pop<1)m.pop+=0.15*f;
+    if(dist<pull){ const cl=1-dist/pull; m.pv+=(0.6+cl*2.4)*f; const step=Math.min(dist,m.pv*f); m.x+=mx/dist*step; m.y+=my/dist*step; }
+    else { m.x+=m.vx*f; m.y+=m.vy*f; m.pv=0; }
+    if(dist<pr+m.r){
+      G.counts[m.type]++; G.absorbed++; G.combo++; G.comboT=1.4; updateCombo();
+      const mult=1+Math.min(G.combo,15)*0.06; G.grow+=mult; G.xp+=(m.type==='microbe'?2:1)*G.xpMult*mult;
+      G.bump=Math.min(0.5,G.bump+0.16); G.scaleY+=0.12; G.scaleX-=0.06;
+      burst(m.x,m.y,m.glow,m.type==='microbe'?14:8,2.2); pop(m.x,m.y-8,'+'+(G.combo>1?G.combo:1),m.glow,G.combo>=5); sAbsorb(G.combo);
+      G.mats.splice(i,1);
+      if(G.mileIdx<MILE.length&&G.absorbed>=MILE[G.mileIdx]){ G.mileIdx++; ringFx(G.x,G.y,'#e8d3a4'); pop(G.x,G.y-pr-18,'育った','#e8d3a4',true); sGrow(); G.bump=Math.min(0.7,G.bump+0.3); }
+      if(G.xp>=G.xpNext){ G.xp-=G.xpNext; G.level++; G.xpNext=Math.round(G.xpNext*1.35+3);
+        const el=document.getElementById('lvl'); el.textContent='Lv.'+G.level; el.style.transform='scale(1.4)'; setTimeout(()=>el.style.transform='',150);
+        G.levelFlash=0.4; ringFx(G.x,G.y,'#cdb6e0'); ringFx(G.x,G.y,'#8fd6e8'); sLevel(); offerUpgrades(); return; }
+      continue;
+    }
+    if(m.x<-60||m.x>W+60||m.y<-60||m.y>H+60)G.mats.splice(i,1);
+  }
+  for(let i=G.polls.length-1;i>=0;i--){ const p=G.polls[i]; p.x+=p.vx*f; p.y+=p.vy*f;
+    const dist=Math.hypot(G.x-p.x,G.y-p.y);
+    if(!p.hit&&dist<pr+p.r){ p.hit=true;
+      if(G.shield>0){ G.shield--; burst(p.x,p.y,'#9ce0bb',12,2.5); pop(p.x,p.y,'シールド','#9ce0bb'); }
+      else { G.murk=Math.min(100,G.murk+p.murk*G.murkMul); G.combo=0; updateCombo();
+        burst(p.x,p.y,'#c9a86a',12,3); pop(p.x,p.y,'濁り','#d8b070'); sHit(); G.shake=Math.min(14,G.shake+8);
+        const a=Math.atan2(G.y-p.y,G.x-p.x); G.x+=Math.cos(a)*12; G.y+=Math.sin(a)*12; } }
+    if(p.x<-80||p.x>W+80||p.y<-80||p.y>H+80)G.polls.splice(i,1);
+  }
+  if(G.cleanse>0&&G.murk>0)G.murk=Math.max(0,G.murk-G.cleanse*ds*4);
+  G.shake*=Math.pow(0.85,f);
+  for(let i=G.parts.length-1;i>=0;i--){ const pt=G.parts[i];
+    if(pt.isRing){ pt.ringR+=(pt.ringMax-pt.ringR)*0.18*f; pt.life-=0.05*f; if(pt.life<=0)G.parts.splice(i,1); continue; }
+    pt.x+=pt.vx*f; pt.y+=pt.vy*f; pt.vx*=0.93; pt.vy*=0.93; pt.life-=0.035*f; if(pt.life<=0)G.parts.splice(i,1); }
+  for(let i=G.pops.length-1;i>=0;i--){ const q=G.pops[i]; q.y+=q.vy*f; q.life-=0.022*f; if(q.life<=0)G.pops.splice(i,1); }
+
+  document.getElementById('xpFill').style.width=(G.xp/G.xpNext*100)+'%';
+  document.getElementById('murkFill').style.width=G.murk+'%';
+  document.getElementById('murkPct').textContent=Math.round(G.murk)+'%';
+  document.getElementById('clock').textContent=Math.max(0,Math.ceil(TT-G.t))+'"';
+  if(G.murk>=100)endGame(false); else if(G.t>=TT)endGame(true);
+}
+function updateCombo(){ const el=document.getElementById('combo');
+  if(G.combo>=3){ el.textContent=G.combo+' COMBO'; el.style.opacity='1'; el.style.transform='scale(1.12)'; setTimeout(()=>el.style.transform='scale(1)',90); }
+  else el.style.opacity='0'; }
+
+// ===================== RENDER =====================
+function drawBlob(g,cx,cy,pr,grade,sx,sy,murk,t){
+  g.save(); g.translate(cx,cy); g.scale(sx,sy);
+  g.beginPath(); g.arc(0,0,pr*1.6,0,6.28);
+  const aura=g.createRadialGradient(0,0,pr*0.6,0,0,pr*1.6);
+  aura.addColorStop(0,'rgba(232,211,164,'+(0.16+grade*0.14)+')'); aura.addColorStop(1,'rgba(232,211,164,0)');
+  g.fillStyle=aura; g.fill();
+  g.beginPath(); g.arc(0,0,pr,0,6.28);
+  const pg=g.createRadialGradient(-pr*0.32,-pr*0.32,pr*0.18,0,0,pr);
+  pg.addColorStop(0,'#fbf4e4'); pg.addColorStop(1,'rgb('+(168-grade*78)+','+(146-grade*72)+','+(116-grade*62)+')');
+  g.fillStyle=pg; g.shadowBlur=22; g.shadowColor='rgba(232,211,164,0.55)'; g.fill(); g.shadowBlur=0;
+  g.lineWidth=1.2; g.strokeStyle='rgba(217,184,119,'+(0.25+grade*0.4)+')'; g.stroke();
+  const rings=Math.floor(grade*4)+1; g.globalAlpha=0.16+grade*0.22;
+  for(let k=1;k<=rings;k++){ g.beginPath(); g.arc(0,0,pr*(k/(rings+1)),0,6.28);
+    g.strokeStyle='rgb('+(132-grade*42)+','+(110-grade*42)+','+(86-grade*38)+')'; g.lineWidth=1; g.stroke(); }
+  g.globalAlpha=1;
+  if(murk>30){ g.globalAlpha=murk/100*0.5; for(let i=0;i<6;i++){ g.beginPath();
+    g.arc(Math.sin(i*2+t)*pr*0.55,Math.cos(i*3+t)*pr*0.55,2,0,6.28); g.fillStyle='#352718'; g.fill(); } g.globalAlpha=1; }
+  g.restore();
+}
+function render(){
+  ctx.save();
+  if(G&&G.running&&G.shake>0.4) ctx.translate((Math.random()-0.5)*G.shake,(Math.random()-0.5)*G.shake);
+  const R = (G&&G.running)?G.region:rById(selRegion);
+  const d=(G&&G.running)?Math.min(1,G.t/TT):0;
+  const tp=R.top, g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'rgb('+(tp[0]-d*4)+','+(tp[1]-d*12)+','+(tp[2]-d*22)+')'); g.addColorStop(1,'rgb(3,8,18)');
+  ctx.fillStyle=g; ctx.fillRect(-20,-20,W+40,H+40);
+  if(G&&G.running){
+    if(G.murk>0){ ctx.fillStyle='rgba(110,60,34,'+(G.murk/100*0.30)+')'; ctx.fillRect(-20,-20,W+40,H+40); }
+    if(G.levelFlash>0){ ctx.fillStyle='rgba(205,182,224,'+(G.levelFlash*0.32)+')'; ctx.fillRect(-20,-20,W+40,H+40); }
+    const pr=G.displayR*(1+G.bump);
+    ctx.beginPath(); ctx.arc(G.x,G.y,G.ring+(G.combo>=3?Math.sin(G.t*8)*4:0),0,6.28);
+    ctx.strokeStyle='rgba(217,184,119,'+(0.09+(G.combo>=3?0.12:0))+')'; ctx.lineWidth=1.2; ctx.stroke();
+    for(let i=0;i<G.trail.length;i++){ const tpt=G.trail[i],a=i/G.trail.length; ctx.globalAlpha=a*0.22;
+      ctx.beginPath(); ctx.arc(tpt.x,tpt.y,pr*a*0.8,0,6.28); ctx.fillStyle='#d6c39e'; ctx.fill(); } ctx.globalAlpha=1;
+    for(const pt of G.parts){ if(!pt.isRing)continue; ctx.globalAlpha=Math.max(0,pt.life);
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.ringR,0,6.28); ctx.strokeStyle=pt.color; ctx.lineWidth=2.5; ctx.stroke(); } ctx.globalAlpha=1;
+    for(const m of G.mats){ const s=Math.min(1,m.pop); ctx.beginPath(); ctx.arc(m.x,m.y,m.r*s,0,6.28);
+      ctx.fillStyle=m.color; ctx.shadowBlur=13; ctx.shadowColor=m.glow; ctx.fill(); ctx.shadowBlur=0; }
+    for(const p of G.polls){ ctx.save(); ctx.translate(p.x,p.y);
+      if(p.type==='plastic'){ ctx.fillStyle=p.color; ctx.fillRect(-p.r,-p.r*0.7,p.r*2,p.r*1.4); }
+      else { ctx.beginPath(); ctx.arc(0,0,p.r,0,6.28); ctx.fillStyle=p.color; ctx.globalAlpha=p.type==='storm'?0.5:0.85; ctx.fill(); ctx.globalAlpha=1; }
+      ctx.restore(); }
+    for(const pt of G.parts){ if(pt.isRing)continue; ctx.globalAlpha=Math.max(0,pt.life);
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.r||2.4,0,6.28); ctx.fillStyle=pt.color; ctx.fill(); } ctx.globalAlpha=1;
+    drawBlob(ctx,G.x,G.y,pr,Math.min(1,G.absorbed/130),G.scaleX,G.scaleY,G.murk,G.t);
+    for(const q of G.pops){ ctx.globalAlpha=Math.max(0,q.life); ctx.font='600 '+q.size+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
+      ctx.fillStyle=q.color; ctx.textAlign='center'; ctx.fillText(q.text,q.x,q.y); } ctx.globalAlpha=1; ctx.textAlign='left';
+  } else {
+    // idle: calm bobbing blob behind menus
+    const bob=Math.sin(performance.now()/1400)*6;
+    drawBlob(ctx,W/2,H*0.40+bob,30,0.4,1,1,0,performance.now()/1000);
+  }
+  // vignette
+  const vg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35,W/2,H/2,Math.max(W,H)*0.75);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.45)'); ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  ctx.restore();
+}
+
+// ===================== SCENT =====================
+function generateScent(good){
+  const c=G.counts, entries=Object.entries(c).sort((a,b)=>b[1]-a[1]), dom=entries[0][0], pure=Math.max(0,1-G.murk/100);
+  const stars=good?Math.max(1,Math.min(5,Math.round(1+G.absorbed/22+pure*2))):Math.max(1,Math.min(3,Math.round(1+G.absorbed/40)));
+  const domAdj={moon:'月光を抱いた',sun:'太陽に乾かされた',weed:'海藻の眠りをまとった',salt:'塩に磨かれた',microbe:'静かに熟成した'};
+  const colorWord=(c.salt>=c.moon&&pure>0.6)?'白い':(G.murk>50?'翳った':(G.absorbed>80?'黄金の':(c.moon>c.sun?'青みがかった':'灰の')));
+  const name=good?(domAdj[dom]||'')+colorWord+'龍涎香':'濁りを帯びた龍涎香';
+  const nw={moon:'月光',sun:'乾いた光',weed:'海藻',salt:'塩',microbe:'熟成した動物性'};
+  const notes=[]; entries.forEach(([k,v])=>{ if(v>0)notes.push(nw[k]); }); if(G.murk>40)notes.push('かすかな濁り'); if(!notes.length)notes.push('海の気配');
+  const pl=G.region.places, place=good?pl[Math.min(pl.length-1,Math.floor(G.absorbed/30))]:'濁った入り江';
+  const state=!good?'濁りきって沈んだ':(pure>0.85&&G.absorbed>60?'静かに深まった、稀有な香り':(pure>0.6?'まろやかに整った香り':'荒れた海を越えてきた香り'));
+  return {name,stars,note:notes.join('、'),place,state,region:G.region.name};
+}
+
+// ===================== SCREENS =====================
+const PANELS=['homePanel','regionPanel','shopPanel','codexPanel','upPanel','endPanel'];
+function show(id){ PANELS.forEach(p=>document.getElementById(p).classList.add('hidden')); if(id)document.getElementById(id).classList.remove('hidden'); }
+
+function showHome(){ stopPad(); document.getElementById('homeEssence').textContent=SAVE.essence;
+  document.getElementById('homeRegion').textContent='海域：'+rById(selRegion).name;
+  document.getElementById('regionName').textContent=rById(selRegion).name; show('homePanel'); }
+
+function renderRegions(){ document.getElementById('regionEssence').textContent=SAVE.essence;
+  const box=document.getElementById('regionList'); box.innerHTML='';
+  REGIONS.forEach(R=>{ const owned=SAVE.regions.includes(R.id), d=document.createElement('div'); d.className='card'+(owned?'':' locked');
+    const sel=(selRegion===R.id)?' ✓':'';
+    d.innerHTML='<div class="ttl">'+R.name+sel+'<span class="meta">'+(owned?'選択':'🔒 '+R.cost)+'</span></div>'+
+      '<div class="dsc">'+(owned?'この海域で漂う':'熟成エキス '+R.cost+' で解放')+'</div>';
+    d.onclick=()=>{ if(owned){ selRegion=R.id; save(); renderRegions(); }
+      else if(SAVE.essence>=R.cost){ SAVE.essence-=R.cost; SAVE.regions.push(R.id); selRegion=R.id; save(); renderRegions(); } };
+    box.appendChild(d); }); }
+
+function renderShop(){ document.getElementById('shopEssence').textContent=SAVE.essence;
+  const box=document.getElementById('shopList'); box.innerHTML='';
+  PERKS.forEach(P=>{ const lv=SAVE.perks[P.id]||0, maxed=lv>=P.max, cost=P.cost(lv), d=document.createElement('div'); d.className='card'+(maxed?' locked':'');
+    d.innerHTML='<div class="ttl"><span class="ico">'+P.ico+'</span>'+P.name+' <span style="opacity:.6;font-size:12px">Lv.'+lv+'/'+P.max+'</span>'+
+      '<span class="meta">'+(maxed?'MAX':'➤ '+cost)+'</span></div>'+
+      '<div class="dsc">'+P.dsc+'（現在 '+P.eff(lv)+'）</div>';
+    d.onclick=()=>{ if(maxed)return; if(SAVE.essence>=cost){ SAVE.essence-=cost; SAVE.perks[P.id]=lv+1; save(); renderShop(); } };
+    box.appendChild(d); }); }
+
+function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementById('codexCount').textContent=keys.length;
+  const box=document.getElementById('codexGrid'); box.innerHTML='';
+  if(!keys.length){ const e=document.createElement('div'); e.className='gx empty'; e.textContent='まだ香りを見つけていない'; e.style.gridColumn='1/3'; box.appendChild(e); return; }
+  keys.map(k=>SAVE.codex[k]).map((v,i)=>({v,name:keys[i]})).sort((a,b)=>b.v.stars-a.v.stars).forEach(({v,name})=>{
+    const d=document.createElement('div'); d.className='gx';
+    d.innerHTML='<div class="gn">'+name+'</div><div class="gs">'+'★'.repeat(v.stars)+'☆'.repeat(5-v.stars)+'</div><div class="gp">'+(v.place||'')+'｜'+(v.region||'')+'</div>';
+    box.appendChild(d); }); }
+
+// ===================== START / END =====================
+function startGame(){ initAudio(); startPad(); newGame(selRegion); G.running=true;
+  document.getElementById('regionName').textContent=G.region.name; document.getElementById('lvl').textContent='Lv.1';
+  show(null); last=performance.now(); requestAnimationFrame(loop); }
+
+let lastScent=null;
+function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPad();
+  const s=generateScent(good); lastScent=s; if(good)sArrive(); else sHit();
+  const grade=Math.min(1,G.absorbed/130);
+  const earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4)));
+  SAVE.essence+=earned;
+  const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region};
+  save();
+  document.getElementById('endTitle').textContent=good?'漂着しました':'濁ってしまった…';
+  document.getElementById('sName').textContent=s.name;
+  document.getElementById('sStars').textContent='★'.repeat(s.stars)+'☆'.repeat(5-s.stars);
+  document.getElementById('sNote').textContent='ノート：'+s.note;
+  document.getElementById('sPlace').textContent='漂着地：'+s.place+'（'+s.region+'）';
+  document.getElementById('sState').textContent='状態：'+s.state;
+  document.getElementById('earned').textContent='熟成エキス +'+earned+'　（所持 '+SAVE.essence+'）';
+  show('endPanel');
+}
+
+// ===================== SHARE IMAGE =====================
+function drawShare(s){
+  const c=document.createElement('canvas'); c.width=900; c.height=1120; const x=c.getContext('2d');
+  const g=x.createLinearGradient(0,0,0,1120); g.addColorStop(0,'#0a1830'); g.addColorStop(1,'#040c1a'); x.fillStyle=g; x.fillRect(0,0,900,1120);
+  x.strokeStyle='rgba(217,184,119,.55)'; x.lineWidth=2; x.strokeRect(34,34,832,1052);
+  x.strokeStyle='rgba(217,184,119,.25)'; x.strokeRect(46,46,808,1028);
+  x.textAlign='center'; x.fillStyle='#d9b877'; x.font='600 22px serif'; x.fillText('R Y U Z E N K O   D R I F T',450,110);
+  // blob
+  const cx=450,cy=410,pr=150, grade=Math.min(1,s.stars/5);
+  let a=x.createRadialGradient(cx,cy,pr*0.5,cx,cy,pr*1.7); a.addColorStop(0,'rgba(232,211,164,.30)'); a.addColorStop(1,'rgba(232,211,164,0)');
+  x.fillStyle=a; x.beginPath(); x.arc(cx,cy,pr*1.7,0,6.28); x.fill();
+  let pgr=x.createRadialGradient(cx-pr*0.3,cy-pr*0.3,pr*0.2,cx,cy,pr); pgr.addColorStop(0,'#fbf4e4'); pgr.addColorStop(1,'rgb('+(168-grade*78)+','+(146-grade*72)+','+(116-grade*62)+')');
+  x.fillStyle=pgr; x.beginPath(); x.arc(cx,cy,pr,0,6.28); x.fill();
+  x.strokeStyle='rgba(217,184,119,.7)'; x.lineWidth=2; x.stroke();
+  const rings=Math.floor(grade*4)+1; x.globalAlpha=.3;
+  for(let k=1;k<=rings;k++){ x.beginPath(); x.arc(cx,cy,pr*(k/(rings+1)),0,6.28); x.strokeStyle='rgb(120,100,80)'; x.lineWidth=1.2; x.stroke(); } x.globalAlpha=1;
+  // texts
+  x.fillStyle='#eef3fb'; x.font='600 40px serif';
+  wrap(x,s.name,450,690,760,50);
+  x.fillStyle='#d9b877'; x.font='34px serif'; x.fillText('★'.repeat(s.stars)+'☆'.repeat(5-s.stars),450,790);
+  x.fillStyle='rgba(238,243,251,.82)'; x.font='22px serif';
+  x.fillText('ノート　'+s.note,450,860);
+  x.fillText('漂着地　'+s.place+'（'+s.region+'）',450,902);
+  x.fillStyle='rgba(238,243,251,.6)'; x.font='20px serif'; x.fillText(s.state,450,966);
+  x.fillStyle='rgba(217,184,119,.7)'; x.font='18px serif'; x.fillText('— 龍涎香ドリフト —',450,1040);
+  return c.toDataURL('image/png');
+}
+function wrap(x,text,cx,cy,maxW,lh){ const ch=[...text]; let line='',y=cy,lines=[];
+  for(const c of ch){ if(x.measureText(line+c).width>maxW){ lines.push(line); line=c; } else line+=c; } lines.push(line);
+  const start=cy-(lines.length-1)*lh/2; lines.forEach((l,i)=>x.fillText(l,cx,start+i*lh)); }
+
+// ===================== WIRING =====================
+document.getElementById('goBtn').onclick=startGame;
+document.getElementById('againBtn').onclick=startGame;
+document.getElementById('homeBtn2').onclick=showHome;
+document.getElementById('regionBtn').onclick=()=>{ renderRegions(); show('regionPanel'); };
+document.getElementById('shopBtn').onclick=()=>{ renderShop(); show('shopPanel'); };
+document.getElementById('codexBtn').onclick=()=>{ renderCodex(); show('codexPanel'); };
+document.querySelectorAll('[data-home]').forEach(b=>b.onclick=showHome);
+document.getElementById('shareBtn').onclick=()=>{ if(!lastScent)return; const url=drawShare(lastScent);
+  const a=document.createElement('a'); a.href=url; a.download='龍涎香_'+lastScent.name+'.png'; document.body.appendChild(a); a.click(); a.remove(); };
+
+newGame(selRegion); G.running=false;
+(function idle(){ if(!G||!G.running)render(); requestAnimationFrame(idle); })();
+showHome();
+</script>
+</body>
+</html>
