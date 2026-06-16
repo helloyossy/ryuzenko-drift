@@ -3,7 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>龍涎香ドリフト prototype v0.6</title>
+<!-- v0.7 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="龍涎香ドリフト">
+<meta property="og:description" content="海を漂い、育ち、香りになる。あなただけの龍涎香を生み出すローグライト。">
+<meta property="og:image" content="https://helloyossy.github.io/ryuzenko-drift/ogp.png">
+<meta property="og:url" content="https://helloyossy.github.io/ryuzenko-drift/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="龍涎香ドリフト">
+<meta name="twitter:description" content="海を漂い、育ち、香りになる。あなただけの龍涎香を生み出すローグライト。">
+<meta name="twitter:image" content="https://helloyossy.github.io/ryuzenko-drift/ogp.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='%23ecdcae'/%3E%3Ccircle cx='16' cy='16' r='12' fill='none' stroke='%23d9b877'/%3E%3C/svg%3E">
 <style>
   :root{
     --gold:#d9b877; --gold-soft:#e8d3a4; --ink:#eef3fb; --glass:rgba(8,18,34,.82);
@@ -35,6 +46,7 @@
   h1 { font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:.18em; margin-bottom:6px; }
   h1 .small{ font-size:19px; letter-spacing:.12em; }
   .tag { font-size:11px; letter-spacing:.42em; color:var(--gold); opacity:.85; margin-bottom:14px; text-indent:.42em;}
+  .tagline { font-family:var(--serif); font-size:14px; letter-spacing:.16em; color:var(--ink); opacity:.6; margin:2px 0 14px; }
   .sub { font-size:13px; opacity:.66; max-width:440px; line-height:1.9; margin-bottom:24px; }
   .btn { pointer-events:auto; cursor:pointer; border:1px solid rgba(217,184,119,.5); border-radius:2px;
          padding:13px 30px; font-size:14px; font-weight:600; letter-spacing:.16em; margin:5px;
@@ -92,6 +104,7 @@
   <div id="homePanel" class="panel">
     <div class="tag">RYUZENKO DRIFT</div>
     <h1>龍涎香ドリフト</h1>
+    <div class="tagline">海を漂い、育ち、香りになる</div>
     <div class="essence">熟成エキス &nbsp;<b id="homeEssence">0</b></div>
     <div class="sub" id="homeRegion">海域：黒潮</div>
     <div>
@@ -230,7 +243,7 @@ function sHit(){ if(!AC)return; const t=AC.currentTime; const o=AC.createOscilla
   o.connect(g); g.connect(lp); lp.connect(master); lp.connect(reverb); o.start(t); o.stop(t+0.4); }
 function startPad(){ if(!AC)return; stopPad(); const t=AC.currentTime; const pg=AC.createGain();
   pg.gain.setValueAtTime(0.0001,t); pg.gain.linearRampToValueAtTime(0.045,t+3.5); pg.connect(reverb); pg.connect(master);
-  const arr=[130.81,196.0,261.63]; pad={osc:[],gain:pg};
+  const arr=((G&&G.region&&MOOD[G.region.id]&&MOOD[G.region.id].pad)||[130.81,196.0,261.63]); pad={osc:[],gain:pg};
   arr.forEach((f,i)=>{ const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f; o.detune.value=(i-1)*5; o.connect(pg); o.start(); pad.osc.push(o); }); }
 function stopPad(){ if(!pad)return; const t=AC.currentTime; try{ pad.gain.gain.cancelScheduledValues(t); pad.gain.gain.setValueAtTime(pad.gain.gain.value,t);
   pad.gain.gain.exponentialRampToValueAtTime(0.0001,t+1.3); }catch(e){} pad.osc.forEach(o=>{try{o.stop(t+1.4);}catch(e){}}); pad=null; }
@@ -250,8 +263,8 @@ function newGame(regionId){
     mats:[],polls:[],parts:[],pops:[],trail:[],
     counts:{moon:0,sun:0,weed:0,salt:0,microbe:0,whale:0}, absorbed:0,
     spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0,
-    phase:'play', arriveT:0, introT:2.2,
-    snow:[], rays:[], currents:[], curT:1.5,
+    phase:'play', arriveT:0, introT:2.2, tut:!SAVE.tutDone,
+    snow:[], rays:[], currents:[], curT:1.5, whaleT:6, whaleShadow:null,
     ended:false };
   for(let i=0;i<70;i++)G.snow.push({x:Math.random()*W,y:Math.random()*H,z:0.3+Math.random()*0.7,ph:Math.random()*6.28});
   for(let i=0;i<4;i++)G.rays.push({x:(i+0.5)/4*W+(Math.random()-0.5)*80,w:55+Math.random()*70,ph:Math.random()*6.28,sp:0.0003+Math.random()*0.0004});
@@ -405,18 +418,48 @@ function drawBlob(g,cx,cy,pr,grade,sx,sy,murk,t){
   g.restore();
 }
 const MOOD={
-  kuroshio:{ray:1.0,snow:'#dfe9ff',snowA:1,biolum:0,caustic:0,tint:null},
-  amami:{ray:1.0,snow:'#d7f0e2',snowA:1,biolum:0,caustic:0.5,tint:'rgba(40,120,110,0.05)'},
-  okinawa:{ray:1.4,snow:'#e8f7ff',snowA:1,biolum:0,caustic:1.0,tint:'rgba(40,150,170,0.06)'},
-  tokunoshima:{ray:0.8,snow:'#dbe2ff',snowA:1,biolum:0.35,caustic:0,tint:'rgba(60,70,140,0.05)'},
-  chiba:{ray:0.5,snow:'#cfd6e0',snowA:0.85,biolum:0,caustic:0,tint:'rgba(70,72,82,0.08)'},
-  shinkai:{ray:0.12,snow:'#9fd8ff',snowA:0.7,biolum:1.0,caustic:0,tint:'rgba(0,8,26,0.20)'},
+  kuroshio:{ray:1.0,snow:'#dfe9ff',snowA:1,biolum:0,caustic:0,tint:null,pad:[130.81,196.0,261.63],whale:0.04},
+  amami:{ray:1.0,snow:'#d7f0e2',snowA:1,biolum:0,caustic:0.5,tint:'rgba(40,120,110,0.05)',pad:[146.83,220.0,293.66],whale:0},
+  okinawa:{ray:1.4,snow:'#e8f7ff',snowA:1,biolum:0,caustic:1.0,tint:'rgba(40,150,170,0.06)',pad:[196.0,261.63,329.63],whale:0},
+  tokunoshima:{ray:0.8,snow:'#dbe2ff',snowA:1,biolum:0.35,caustic:0,tint:'rgba(60,70,140,0.05)',pad:[110.0,164.81,220.0],whale:0.06},
+  chiba:{ray:0.5,snow:'#cfd6e0',snowA:0.85,biolum:0,caustic:0,tint:'rgba(70,72,82,0.08)',pad:[123.47,164.81,246.94],whale:0},
+  shinkai:{ray:0.12,snow:'#9fd8ff',snowA:0.7,biolum:1.0,caustic:0,tint:'rgba(0,8,26,0.20)',pad:[65.41,98.0,146.83],whale:0.16},
 };
 const RSUB={kuroshio:'黒潮の本流へ',amami:'珊瑚の島の海',okinawa:'光あふれる浅瀬',tokunoshima:'月明かりの環礁',chiba:'暮らしに近い海',shinkai:'光届かぬ深み'};
+function drawWhale(x,y,sc,al,dir){
+  ctx.save(); ctx.translate(x,y); ctx.scale(dir*sc,sc); ctx.globalAlpha=al;
+  ctx.fillStyle='rgba(20,32,54,0.9)';
+  ctx.beginPath();
+  ctx.moveTo(-150,0);
+  ctx.quadraticCurveTo(-110,-22,-70,-22);
+  ctx.quadraticCurveTo(40,-40,120,-30);
+  ctx.quadraticCurveTo(150,-26,152,-2);     // boxy sperm-whale head
+  ctx.lineTo(152,20);
+  ctx.quadraticCurveTo(120,32,40,32);
+  ctx.quadraticCurveTo(-50,34,-90,18);
+  ctx.quadraticCurveTo(-120,24,-150,0);
+  ctx.closePath(); ctx.fill();
+  // flukes
+  ctx.beginPath(); ctx.moveTo(-150,0); ctx.quadraticCurveTo(-182,-30,-196,-44); ctx.quadraticCurveTo(-164,-16,-150,0);
+  ctx.quadraticCurveTo(-182,30,-196,44); ctx.quadraticCurveTo(-164,16,-150,0); ctx.fill();
+  // pectoral fin
+  ctx.beginPath(); ctx.moveTo(55,26); ctx.quadraticCurveTo(48,56,26,62); ctx.quadraticCurveTo(48,42,50,26); ctx.fill();
+  // faint rim light
+  ctx.globalAlpha=al*0.5; ctx.lineWidth=1.5; ctx.strokeStyle='rgba(150,180,220,0.5)';
+  ctx.beginPath(); ctx.moveTo(-70,-22); ctx.quadraticCurveTo(40,-40,120,-30); ctx.quadraticCurveTo(150,-26,152,-2); ctx.stroke();
+  ctx.restore();
+}
 function drawAmbient(){
   if(!G||!G.snow) return;
   const R=(G.running?G.region:rById(selRegion)), m=MOOD[R.id]||MOOD.kuroshio, now=performance.now();
   if(m.tint){ ctx.fillStyle=m.tint; ctx.fillRect(-20,-20,W+40,H+40); }
+  // passing whale silhouette (mystical, region-gated)
+  if(!G.whaleShadow){ G.whaleT-=0.016; if(G.whaleT<=0){ G.whaleT=9+Math.random()*11;
+    if(Math.random()<(m.whale||0)){ const dir=Math.random()<0.5?1:-1;
+      G.whaleShadow={x:dir>0?-280:W+280, y:H*(0.22+Math.random()*0.42), dir, sc:0.85+Math.random()*0.8, sp:0.5+Math.random()*0.4, al:0}; } } }
+  if(G.whaleShadow){ const w=G.whaleShadow; w.x+=w.dir*w.sp; w.al=Math.min(0.4,w.al+0.004);
+    drawWhale(w.x,w.y,w.sc,w.al,w.dir);
+    if((w.dir>0&&w.x>W+340)||(w.dir<0&&w.x<-340)) G.whaleShadow=null; }
   // god-rays from surface
   if(m.ray>0.05) for(const r of G.rays){ r.ph+=r.sp*16; const sway=Math.sin(r.ph)*40;
     ctx.save(); ctx.globalCompositeOperation='lighter';
@@ -494,6 +537,12 @@ function render(){
       ctx.fillStyle='rgba(238,243,251,'+(a*0.66)+')'; ctx.font='400 '+Math.round(Math.min(W,H)*0.021)+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
       ctx.fillText(RSUB[G.region.id]||'',W/2,H*0.27+Math.min(W,H)*0.05);
       ctx.globalAlpha=1; ctx.textAlign='left'; }
+    if(G.tut && G.t<10.5){ const sf=getComputedStyle(document.body).getPropertyValue('--serif');
+      let msg=''; if(G.t>2.3&&G.t<5)msg='なぞって龍涎香を動かす'; else if(G.t>=5&&G.t<7.7)msg='光る素材を吸って育つ'; else if(G.t>=7.7&&G.t<10.5)msg='赤い汚染は避ける';
+      if(msg){ ctx.textAlign='center'; ctx.globalAlpha=0.92; ctx.fillStyle='rgba(232,211,164,0.95)';
+        ctx.font='600 '+Math.round(Math.min(W,H)*0.032)+'px '+sf; ctx.fillText(msg,W/2,H*0.8); ctx.globalAlpha=1; ctx.textAlign='left'; }
+      if(G.t>2.3&&G.t<5.2){ const pr2=G.displayR*(1+G.bump), pulse=10+Math.sin(G.t*5)*7;
+        ctx.globalAlpha=0.45; ctx.strokeStyle='#e8d3a4'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(G.x,G.y,pr2+20+pulse,0,6.28); ctx.stroke(); ctx.globalAlpha=1; } }
     for(const q of G.pops){ ctx.globalAlpha=Math.max(0,q.life); ctx.font='600 '+q.size+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
       ctx.fillStyle=q.color; ctx.textAlign='center'; ctx.fillText(q.text,q.x,q.y); } ctx.globalAlpha=1; ctx.textAlign='left';
   } else {
@@ -558,7 +607,7 @@ function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementB
     box.appendChild(d); }); }
 
 // ===================== START / END =====================
-function startGame(){ initAudio(); startPad(); newGame(selRegion); G.running=true;
+function startGame(){ initAudio(); newGame(selRegion); startPad(); G.running=true;
   document.getElementById('regionName').textContent=G.region.name; document.getElementById('lvl').textContent='Lv.1';
   show(null); last=performance.now(); requestAnimationFrame(loop); }
 
@@ -569,7 +618,7 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
   const earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4)));
   SAVE.essence+=earned;
   const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region};
-  save();
+  SAVE.tutDone=1; save();
   document.getElementById('endTitle').textContent=good?'漂着しました':'濁ってしまった…';
   document.getElementById('sName').textContent=s.name;
   document.getElementById('sStars').textContent='★'.repeat(s.stars)+'☆'.repeat(5-s.stars);
