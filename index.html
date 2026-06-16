@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- v0.9 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<!-- v0.10 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
 <meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="龍涎香ドリフト">
@@ -195,7 +195,7 @@ addEventListener('resize',resize); resize();
 
 // ===================== SAVE =====================
 const SAVE_KEY='drift_save_v1';
-function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}}; }
+function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}, best:{}}; }
 let SAVE; try{ SAVE=Object.assign(def(),JSON.parse(localStorage.getItem(SAVE_KEY))||{}); SAVE.perks=Object.assign(def().perks,SAVE.perks||{}); }catch(e){ SAVE=def(); }
 function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE)); }catch(e){} }
 
@@ -283,7 +283,7 @@ function newGame(regionId){
     mats:[],polls:[],parts:[],pops:[],trail:[],
     counts:{moon:0,sun:0,weed:0,salt:0,microbe:0,whale:0}, absorbed:0,
     spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0,
-    phase:'play', arriveT:0, introT:2.2, tut:!SAVE.tutDone,
+    phase:'play', arriveT:0, introT:2.2, tut:!SAVE.tutDone, seed:Math.floor(Math.random()*997)+1, maxCombo:0,
     snow:[], rays:[], currents:[], curT:1.5, whaleT:6, whaleShadow:null,
     ended:false };
   for(let i=0;i<70;i++)G.snow.push({x:Math.random()*W,y:Math.random()*H,z:0.3+Math.random()*0.7,ph:Math.random()*6.28});
@@ -375,7 +375,7 @@ function update(f,ds){
     if(dist<pull){ const cl=1-dist/pull; m.pv+=(0.6+cl*2.4)*f; const step=Math.min(dist,m.pv*f); m.x+=mx/dist*step; m.y+=my/dist*step; }
     else { m.x+=m.vx*f; m.y+=m.vy*f; m.pv=0; }
     if(dist<pr+m.r){
-      G.counts[m.type]=(G.counts[m.type]||0)+1; G.absorbed++; G.combo++; G.comboT=1.4; updateCombo();
+      G.counts[m.type]=(G.counts[m.type]||0)+1; G.absorbed++; G.combo++; if(G.combo>G.maxCombo)G.maxCombo=G.combo; G.comboT=1.4; updateCombo();
       const mult=1+Math.min(G.combo,15)*0.06;
       if(m.type==='whale'){ G.grow+=9*mult; G.xp+=7*G.xpMult*mult; G.bump=Math.min(0.85,G.bump+0.42);
         burst(m.x,m.y,'#ffcf66',24,3.4); ringFx(m.x,m.y,'#ffe9b0'); ringFx(G.x,G.y,'#ffcf66'); pop(m.x,m.y-12,'鯨の記憶','#ffe6a0',true); sGrow(); sLevel(); }
@@ -418,23 +418,53 @@ function updateCombo(){ const el=document.getElementById('combo');
   else el.style.opacity='0'; }
 
 // ===================== RENDER =====================
-function drawBlob(g,cx,cy,pr,grade,sx,sy,murk,t){
+// ---- 龍涎香（アンバーグリス）描画：マーブルのいびつな蝋状の塊 ----
+function hashName(s){ let h=0; s=String(s||''); for(let i=0;i<s.length;i++){ h=(h*31+s.charCodeAt(i))%100000; } return h; }
+const _cl=v=>Math.max(0,Math.min(255,Math.round(v)));
+const _sh=(a,d)=>[_cl(a[0]+d),_cl(a[1]+d),_cl(a[2]+d)];
+const DOMBIAS={moon:[-8,-2,14],sun:[16,7,-10],weed:[-8,10,-4],salt:[6,6,9],microbe:[-10,9,7],whale:[18,9,-12]};
+function ambergrisBase(grade,dom){ const lo=[50,46,50], hi=[214,208,196];
+  let b=lo.map((c,i)=>c+(hi[i]-c)*grade); const bias=DOMBIAS[dom]; if(bias)b=b.map((c,i)=>c+bias[i]*0.6); return b.map(_cl); }
+function ambergrisPath(g,cx,cy,r,seed){ const N=11, pts=[];
+  for(let i=0;i<N;i++){ const a=i/N*6.283185, rr=r*(0.80+0.13*Math.sin(seed*0.7+i*1.7)+0.07*Math.sin(seed*1.9+i*3.3));
+    pts.push([cx+Math.cos(a)*rr, cy+Math.sin(a)*rr]); }
+  g.beginPath(); g.moveTo((pts[0][0]+pts[N-1][0])/2,(pts[0][1]+pts[N-1][1])/2);
+  for(let i=0;i<N;i++){ const p=pts[i], n=pts[(i+1)%N]; g.quadraticCurveTo(p[0],p[1],(p[0]+n[0])/2,(p[1]+n[1])/2); }
+  g.closePath(); }
+function drawAmbergris(g,cx,cy,r,o){
+  o=o||{}; const grade=o.grade==null?0.5:o.grade, pure=o.pure==null?1:o.pure, seed=o.seed||1, base=ambergrisBase(grade,o.dom);
+  if(o.aura!==false){ let a=g.createRadialGradient(cx,cy,r*0.6,cx,cy,r*1.7);
+    a.addColorStop(0,'rgba(232,219,188,'+(0.12+grade*0.12)+')'); a.addColorStop(1,'rgba(232,219,188,0)');
+    g.fillStyle=a; g.beginPath(); g.arc(cx,cy,r*1.7,0,6.283185); g.fill(); }
+  ambergrisPath(g,cx,cy,r,seed);
+  g.save(); g.shadowBlur=r*0.28; g.shadowColor='rgba(0,0,0,0.40)';
+  let gr=g.createRadialGradient(cx-r*0.32,cy-r*0.38,r*0.15,cx,cy,r*1.15);
+  gr.addColorStop(0,'rgb('+_sh(base,30).join(',')+')'); gr.addColorStop(1,'rgb('+_sh(base,-34).join(',')+')');
+  g.fillStyle=gr; g.fill(); g.shadowBlur=0; g.clip();
+  for(let i=0;i<6;i++){ const ph=seed*0.5+i*2.27, y0=cy+Math.sin(ph)*r*0.6;
+    g.beginPath(); g.moveTo(cx-r*1.1,y0);
+    g.quadraticCurveTo(cx+Math.cos(ph)*r*0.4, y0+Math.sin(ph*1.6)*r*0.6, cx+r*1.1, y0+Math.cos(ph*1.3)*r*0.5);
+    g.lineWidth=r*(0.04+0.045*Math.abs(Math.sin(ph*1.1)));
+    const vc=i%2?_sh(base,42):_sh(base,-32); g.strokeStyle='rgba('+vc.join(',')+',0.22)'; g.stroke(); }
+  for(let i=0;i<9;i++){ const an=seed*0.9+i*0.83, rr=r*(0.15+((i*0.37)%1)*0.62);
+    g.beginPath(); g.arc(cx+Math.cos(an)*rr, cy+Math.sin(an*1.21)*rr*0.85, r*0.10*(0.5+((i*0.27)%1)),0,6.283185);
+    const mc=i%2?_sh(base,34):_sh(base,-28); g.fillStyle='rgba('+mc.join(',')+',0.16)'; g.fill(); }
+  let h=g.createRadialGradient(cx-r*0.3,cy-r*0.42,0,cx-r*0.3,cy-r*0.42,r*0.95);
+  h.addColorStop(0,'rgba(255,250,236,0.30)'); h.addColorStop(1,'rgba(255,250,236,0)');
+  g.fillStyle=h; g.fillRect(cx-r*1.3,cy-r*1.3,r*2.6,r*2.6);
+  if(pure<0.8){ for(let i=0;i<6;i++){ const an=seed+i*1.4, rr=r*(0.2+((i*0.41)%1)*0.6);
+    g.beginPath(); g.arc(cx+Math.cos(an)*rr,cy+Math.sin(an)*rr*0.9, r*0.14,0,6.283185);
+    g.fillStyle='rgba(26,20,14,'+((1-pure)*0.4)+')'; g.fill(); } }
+  if(o.whale){ for(let i=0;i<8;i++){ const an=seed*1.7+i*0.79, rr=r*(0.2+((i*0.33)%1)*0.6);
+    g.beginPath(); g.arc(cx+Math.cos(an)*rr,cy+Math.sin(an*1.1)*rr, r*0.035,0,6.283185);
+    g.fillStyle='rgba(255,212,120,0.85)'; g.fill(); } }
+  g.restore();
+  ambergrisPath(g,cx,cy,r,seed); g.lineWidth=Math.max(1,r*0.018); g.strokeStyle='rgba(28,24,22,0.45)'; g.stroke();
+  ambergrisPath(g,cx,cy,r,seed); g.lineWidth=Math.max(0.6,r*0.01); g.strokeStyle='rgba(232,211,150,'+(0.15+grade*0.25)+')'; g.stroke();
+}
+function drawBlob(g,cx,cy,pr,grade,sx,sy,murk,t,seed,whale){
   g.save(); g.translate(cx,cy); g.scale(sx,sy);
-  g.beginPath(); g.arc(0,0,pr*1.6,0,6.28);
-  const aura=g.createRadialGradient(0,0,pr*0.6,0,0,pr*1.6);
-  aura.addColorStop(0,'rgba(232,211,164,'+(0.16+grade*0.14)+')'); aura.addColorStop(1,'rgba(232,211,164,0)');
-  g.fillStyle=aura; g.fill();
-  g.beginPath(); g.arc(0,0,pr,0,6.28);
-  const pg=g.createRadialGradient(-pr*0.32,-pr*0.32,pr*0.18,0,0,pr);
-  pg.addColorStop(0,'#fbf4e4'); pg.addColorStop(1,'rgb('+(168-grade*78)+','+(146-grade*72)+','+(116-grade*62)+')');
-  g.fillStyle=pg; g.shadowBlur=22; g.shadowColor='rgba(232,211,164,0.55)'; g.fill(); g.shadowBlur=0;
-  g.lineWidth=1.2; g.strokeStyle='rgba(217,184,119,'+(0.25+grade*0.4)+')'; g.stroke();
-  const rings=Math.floor(grade*4)+1; g.globalAlpha=0.16+grade*0.22;
-  for(let k=1;k<=rings;k++){ g.beginPath(); g.arc(0,0,pr*(k/(rings+1)),0,6.28);
-    g.strokeStyle='rgb('+(132-grade*42)+','+(110-grade*42)+','+(86-grade*38)+')'; g.lineWidth=1; g.stroke(); }
-  g.globalAlpha=1;
-  if(murk>30){ g.globalAlpha=murk/100*0.5; for(let i=0;i<6;i++){ g.beginPath();
-    g.arc(Math.sin(i*2+t)*pr*0.55,Math.cos(i*3+t)*pr*0.55,2,0,6.28); g.fillStyle='#352718'; g.fill(); } g.globalAlpha=1; }
+  drawAmbergris(g,0,0,pr,{grade,pure:Math.max(0,1-murk/100),whale:!!whale,seed:seed||1});
   g.restore();
 }
 const MOOD={
@@ -447,24 +477,10 @@ const MOOD={
 };
 const RSUB={kuroshio:'黒潮の本流へ',amami:'珊瑚の島の海',okinawa:'光あふれる浅瀬',tokunoshima:'月明かりの環礁',chiba:'暮らしに近い海',shinkai:'光届かぬ深み'};
 const DOMTINT={moon:'159,182,255',sun:'240,182,90',weed:'120,210,160',salt:'200,224,255',microbe:'84,203,184',whale:'255,207,102'};
-function drawPearlThumb(x,S,v){
-  const cx=S/2, cy=S/2, pr=S*0.32, grade=v.grade==null?0.4:v.grade, pure=v.pure==null?1:v.pure, tint=DOMTINT[v.dom]||'200,224,255';
-  x.clearRect(0,0,S,S);
-  let a=x.createRadialGradient(cx,cy,pr*0.5,cx,cy,pr*1.8); a.addColorStop(0,'rgba('+tint+',0.38)'); a.addColorStop(1,'rgba('+tint+',0)');
-  x.fillStyle=a; x.beginPath(); x.arc(cx,cy,pr*1.8,0,6.28); x.fill();
-  let pg=x.createRadialGradient(cx-pr*0.32,cy-pr*0.32,pr*0.2,cx,cy,pr);
-  pg.addColorStop(0,'#fbf4e4'); pg.addColorStop(1,'rgb('+Math.round(168-grade*78)+','+Math.round(146-grade*72)+','+Math.round(116-grade*62)+')');
-  x.fillStyle=pg; x.beginPath(); x.arc(cx,cy,pr,0,6.28); x.fill();
-  x.lineWidth=1.2; x.strokeStyle='rgba(217,184,119,0.75)'; x.stroke();
-  const rings=Math.max(1,(v.stars||1)-1); x.globalAlpha=0.25;
-  for(let k=1;k<=rings;k++){ x.beginPath(); x.arc(cx,cy,pr*(k/(rings+1)),0,6.28); x.strokeStyle='rgb(120,100,80)'; x.lineWidth=0.7; x.stroke(); }
-  x.globalAlpha=1;
-  let sp=x.createRadialGradient(cx-pr*0.34,cy-pr*0.34,0,cx-pr*0.34,cy-pr*0.34,pr*0.45);
-  sp.addColorStop(0,'rgba(255,255,255,0.85)'); sp.addColorStop(1,'rgba(255,255,255,0)');
-  x.fillStyle=sp; x.beginPath(); x.arc(cx-pr*0.34,cy-pr*0.34,pr*0.45,0,6.28); x.fill();
-  if(pure<0.7){ x.globalAlpha=(1-pure)*0.55; for(let i=0;i<5;i++){ x.beginPath(); x.arc(cx+Math.sin(i*2)*pr*0.5,cy+Math.cos(i*3)*pr*0.5,1.4,0,6.28); x.fillStyle='#352718'; x.fill(); } x.globalAlpha=1; }
-  if(v.whale){ x.strokeStyle='rgba(255,243,208,0.9)'; x.lineWidth=1;
-    for(let k=0;k<4;k++){ const an=k/4*6.28+0.6; x.beginPath(); x.moveTo(cx+Math.cos(an)*pr*1.15,cy+Math.sin(an)*pr*1.15); x.lineTo(cx+Math.cos(an)*pr*1.55,cy+Math.sin(an)*pr*1.55); x.stroke(); } }
+function drawPearlThumb(x,S,v,name){
+  x.clearRect(0,0,S,S); v=v||{};
+  const seed=(v.seed!=null)?v.seed:hashName(name||'龍涎香');
+  drawAmbergris(x,S/2,S/2,S*0.34,{grade:v.grade==null?0.5:v.grade, pure:v.pure==null?1:v.pure, whale:!!v.whale, seed, dom:v.dom});
 }
 function drawWhale(x,y,sc,al,dir){
   ctx.save(); ctx.translate(x,y); ctx.scale(dir*sc,sc); ctx.globalAlpha=al;
@@ -562,7 +578,7 @@ function render(){
       ctx.restore(); }
     for(const pt of G.parts){ if(pt.isRing)continue; ctx.globalAlpha=Math.max(0,pt.life);
       ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.r||2.4,0,6.28); ctx.fillStyle=pt.color; ctx.fill(); } ctx.globalAlpha=1;
-    drawBlob(ctx,G.x,G.y,pr,Math.min(1,G.absorbed/130),G.scaleX,G.scaleY,G.murk,G.t);
+    drawBlob(ctx,G.x,G.y,pr,Math.min(1,G.absorbed/130),G.scaleX,G.scaleY,G.murk,G.t,G.seed,G.counts.whale>0);
     if(G.phase==='arrive'){ const a=Math.min(1,G.arriveT/1.2); ctx.save(); ctx.globalCompositeOperation='lighter';
       const bg=ctx.createRadialGradient(G.x,G.y,0,G.x,G.y,Math.max(W,H)*0.7*a+90);
       bg.addColorStop(0,'rgba(255,236,180,'+(0.5*a)+')'); bg.addColorStop(0.5,'rgba(255,220,150,'+(0.18*a)+')'); bg.addColorStop(1,'rgba(255,220,150,0)');
@@ -588,7 +604,7 @@ function render(){
   } else {
     // idle: calm bobbing blob behind menus
     const bob=Math.sin(performance.now()/1400)*6;
-    drawBlob(ctx,W/2,H*0.40+bob,30,0.4,1,1,0,performance.now()/1000);
+    drawBlob(ctx,W/2,H*0.40+bob,30,0.4,1,1,0,performance.now()/1000,7,false);
   }
   // vignette
   const vg=ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.35,W/2,H/2,Math.max(W,H)*0.75);
@@ -601,14 +617,24 @@ function generateScent(good){
   const c=G.counts, entries=Object.entries(c).sort((a,b)=>b[1]-a[1]), dom=entries[0][0], pure=Math.max(0,1-G.murk/100);
   const wh=c.whale||0;
   const stars=good?Math.max(1,Math.min(5,Math.round(1+G.absorbed/22+pure*2+wh*0.5))):Math.max(1,Math.min(3,Math.round(1+G.absorbed/40)));
+  const grade=Math.min(1,G.absorbed/130);
   const domAdj={moon:'月光を抱いた',sun:'太陽に乾かされた',weed:'海藻の眠りをまとった',salt:'塩に磨かれた',microbe:'静かに熟成した',whale:'鯨の記憶を宿した'};
-  const colorWord=(c.salt>=c.moon&&pure>0.6)?'白い':(G.murk>50?'翳った':(G.absorbed>80?'黄金の':(c.moon>c.sun?'青みがかった':'灰の')));
-  const name=good?(domAdj[dom]||'')+colorWord+'龍涎香':'濁りを帯びた龍涎香';
+  // 熟成の度合い（接頭辞）
+  const matWord=['','ほのかに熟れた','円熟した','古色の','時を重ねた'][Math.min(4,Math.floor(grade*5))];
+  // 色味（成分・純度・熟成で分岐）→ 収集の幅を広げる
+  let colorWord;
+  if(G.murk>55) colorWord='墨を帯びた';
+  else if(c.salt>=Math.max(c.moon,c.sun) && pure>0.7) colorWord=(grade>0.7?'銀白の':'白い');
+  else if((c.moon||0)>=(c.sun||0) && (c.moon||0)>0) colorWord=(grade>0.7?'青銀の':'青みがかった');
+  else if((c.sun||0)>0) colorWord=(grade>0.7?'琥珀色の':'黄金の');
+  else if((c.weed||0)>0) colorWord=(grade>0.6?'深緑の':'苔色の');
+  else colorWord=(grade>0.6?'鈍色の':'灰の');
+  const name=good?(matWord+(domAdj[dom]||'')+colorWord+'龍涎香'):'濁りを帯びた龍涎香';
   const nw={moon:'月光',sun:'乾いた光',weed:'海藻',salt:'塩',microbe:'熟成した動物性',whale:'鯨の記憶'};
   const notes=[]; entries.forEach(([k,v])=>{ if(v>0)notes.push(nw[k]); }); if(G.murk>40)notes.push('かすかな濁り'); if(!notes.length)notes.push('海の気配');
   const pl=G.region.places, place=good?pl[Math.min(pl.length-1,Math.floor(G.absorbed/30))]:'濁った入り江';
   const state=!good?'濁りきって沈んだ':(wh>0&&pure>0.7?'鯨の記憶を抱いた、伝説の香り':(pure>0.85&&G.absorbed>60?'静かに深まった、稀有な香り':(pure>0.6?'まろやかに整った香り':'荒れた海を越えてきた香り')));
-  const vis={dom, grade:Math.min(1,G.absorbed/130), pure, whale:wh>0, stars};
+  const vis={dom, grade, pure, whale:wh>0, stars, seed:G.seed};
   return {name,stars,note:notes.join('、'),place,state,region:G.region.name,vis};
 }
 
@@ -624,8 +650,9 @@ function renderRegions(){ document.getElementById('regionEssence').textContent=S
   const box=document.getElementById('regionList'); box.innerHTML='';
   REGIONS.forEach(R=>{ const owned=SAVE.regions.includes(R.id), d=document.createElement('div'); d.className='card'+(owned?'':' locked');
     const sel=(selRegion===R.id)?' ✓':'';
+    const best=(SAVE.best&&SAVE.best[R.id])||0;
     d.innerHTML='<div class="ttl">'+R.name+sel+'<span class="meta">'+(owned?'選択':'🔒 '+R.cost)+'</span></div>'+
-      '<div class="dsc">'+(owned?'この海域で漂う':'熟成エキス '+R.cost+' で解放')+'</div>';
+      '<div class="dsc">'+(owned?('この海域で漂う'+(best?'　最高 '+best:'')):'熟成エキス '+R.cost+' で解放')+'</div>';
     d.onclick=()=>{ if(owned){ selRegion=R.id; save(); renderRegions(); }
       else if(SAVE.essence>=R.cost){ SAVE.essence-=R.cost; SAVE.regions.push(R.id); selRegion=R.id; save(); renderRegions(); } };
     box.appendChild(d); }); }
@@ -646,7 +673,7 @@ function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementB
     const d=document.createElement('div'); d.className='gx';
     const cvn=document.createElement('canvas'); cvn.width=120; cvn.height=120; cvn.className='gthumb';
     const vis=v.vis||{dom:'salt',grade:Math.min(1,(v.stars||1)/5),pure:1,whale:false,stars:v.stars||1};
-    drawPearlThumb(cvn.getContext('2d'),120,vis);
+    drawPearlThumb(cvn.getContext('2d'),120,vis,name);
     const tx=document.createElement('div'); tx.className='gtext';
     tx.innerHTML='<div class="gn">'+name+'</div><div class="gs">'+'★'.repeat(v.stars)+'☆'.repeat(5-v.stars)+'</div><div class="gp">'+(v.place||'')+'｜'+(v.region||'')+'</div>';
     d.appendChild(cvn); d.appendChild(tx); d.style.cursor='pointer'; d.onclick=()=>openDetail(name); box.appendChild(d); }); }
@@ -654,7 +681,7 @@ function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementB
 let detailName=null;
 function openDetail(name){ const e=SAVE.codex[name]; if(!e)return; detailName=name;
   const vis=e.vis||{dom:'salt',grade:Math.min(1,(e.stars||1)/5),pure:1,whale:false,stars:e.stars||1};
-  drawPearlThumb(document.getElementById('detailCanvas').getContext('2d'),320,vis);
+  drawPearlThumb(document.getElementById('detailCanvas').getContext('2d'),320,vis,name);
   document.getElementById('dName').textContent=name;
   document.getElementById('dStars').textContent='★'.repeat(e.stars)+'☆'.repeat(5-e.stars);
   document.getElementById('dNote').textContent='ノート：'+(e.note||'');
@@ -675,6 +702,10 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
   const earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4)));
   SAVE.essence+=earned;
   const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region,state:s.state,vis:s.vis};
+  // スコア＆海域ベスト記録
+  const score=Math.round(G.absorbed*10 + (G.maxCombo||0)*8 + s.stars*60 + grade*150 + (good?200:0));
+  SAVE.best=SAVE.best||{}; const rid=G.region.id; const isBest=!SAVE.best[rid]||score>SAVE.best[rid]; if(isBest)SAVE.best[rid]=score;
+  const rank = score>=1600?'龍涎香の達人': score>=1000?'熟成師': score>=500?'漂流者':'見習い';
   SAVE.tutDone=1; save();
   document.getElementById('endTitle').textContent=good?'漂着しました':'濁ってしまった…';
   document.getElementById('sName').textContent=s.name;
@@ -682,7 +713,7 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
   document.getElementById('sNote').textContent='ノート：'+s.note;
   document.getElementById('sPlace').textContent='漂着地：'+s.place+'（'+s.region+'）';
   document.getElementById('sState').textContent='状態：'+s.state;
-  document.getElementById('earned').textContent='熟成エキス +'+earned+'　（所持 '+SAVE.essence+'）';
+  document.getElementById('earned').innerHTML='熟成エキス +'+earned+'　／　スコア <b style="color:#fff">'+score+'</b>'+(isBest?' <span style="color:#e8d3a4">★最高記録</span>':'')+'　［'+rank+'］<br>最高コンボ '+(G.maxCombo||0)+'　所持エキス '+SAVE.essence;
   show('endPanel');
 }
 
@@ -693,20 +724,9 @@ function drawShare(s){
   x.strokeStyle='rgba(217,184,119,.55)'; x.lineWidth=2; x.strokeRect(34,34,832,1052);
   x.strokeStyle='rgba(217,184,119,.25)'; x.strokeRect(46,46,808,1028);
   x.textAlign='center'; x.fillStyle='#d9b877'; x.font='600 22px serif'; x.fillText('R Y U Z E N K O   D R I F T',450,110);
-  // blob (matches codex pearl via s.vis when available)
-  const v=s.vis||{}; const cx=450,cy=410,pr=150;
-  const grade=(v.grade!=null)?v.grade:Math.min(1,s.stars/5), pure=(v.pure!=null)?v.pure:1, tint=DOMTINT[v.dom]||'232,211,164';
-  let a=x.createRadialGradient(cx,cy,pr*0.5,cx,cy,pr*1.8); a.addColorStop(0,'rgba('+tint+',.34)'); a.addColorStop(1,'rgba('+tint+',0)');
-  x.fillStyle=a; x.beginPath(); x.arc(cx,cy,pr*1.8,0,6.28); x.fill();
-  let pgr=x.createRadialGradient(cx-pr*0.3,cy-pr*0.3,pr*0.2,cx,cy,pr); pgr.addColorStop(0,'#fbf4e4'); pgr.addColorStop(1,'rgb('+(168-grade*78)+','+(146-grade*72)+','+(116-grade*62)+')');
-  x.fillStyle=pgr; x.beginPath(); x.arc(cx,cy,pr,0,6.28); x.fill();
-  x.strokeStyle='rgba(217,184,119,.7)'; x.lineWidth=2; x.stroke();
-  const rings=Math.floor(grade*4)+1; x.globalAlpha=.3;
-  for(let k=1;k<=rings;k++){ x.beginPath(); x.arc(cx,cy,pr*(k/(rings+1)),0,6.28); x.strokeStyle='rgb(120,100,80)'; x.lineWidth=1.2; x.stroke(); } x.globalAlpha=1;
-  let sps=x.createRadialGradient(cx-pr*0.34,cy-pr*0.34,0,cx-pr*0.34,cy-pr*0.34,pr*0.45); sps.addColorStop(0,'rgba(255,255,255,.85)'); sps.addColorStop(1,'rgba(255,255,255,0)');
-  x.fillStyle=sps; x.beginPath(); x.arc(cx-pr*0.34,cy-pr*0.34,pr*0.45,0,6.28); x.fill();
-  if(pure<0.7){ x.globalAlpha=(1-pure)*0.55; for(let i=0;i<6;i++){ x.beginPath(); x.arc(cx+Math.sin(i*2)*pr*0.5,cy+Math.cos(i*3)*pr*0.5,3,0,6.28); x.fillStyle='#352718'; x.fill(); } x.globalAlpha=1; }
-  if(v.whale){ x.strokeStyle='rgba(255,243,208,.9)'; x.lineWidth=2; for(let k=0;k<4;k++){ const an=k/4*6.28+0.6; x.beginPath(); x.moveTo(cx+Math.cos(an)*pr*1.12,cy+Math.sin(an)*pr*1.12); x.lineTo(cx+Math.cos(an)*pr*1.5,cy+Math.sin(an)*pr*1.5); x.stroke(); } }
+  // 龍涎香（図鑑と同じ描画）
+  const v=s.vis||{};
+  drawAmbergris(x,450,400,150,{grade:(v.grade!=null)?v.grade:Math.min(1,s.stars/5), pure:(v.pure!=null)?v.pure:1, whale:!!v.whale, seed:(v.seed!=null)?v.seed:hashName(s.name), dom:v.dom});
   // texts
   x.fillStyle='#eef3fb'; x.font='600 40px serif';
   wrap(x,s.name,450,690,760,50);
