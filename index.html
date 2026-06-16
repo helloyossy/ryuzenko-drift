@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>龍涎香ドリフト prototype v0.5</title>
+<title>龍涎香ドリフト prototype v0.6</title>
 <style>
   :root{
     --gold:#d9b877; --gold-soft:#e8d3a4; --ink:#eef3fb; --glass:rgba(8,18,34,.82);
@@ -250,7 +250,7 @@ function newGame(regionId){
     mats:[],polls:[],parts:[],pops:[],trail:[],
     counts:{moon:0,sun:0,weed:0,salt:0,microbe:0,whale:0}, absorbed:0,
     spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0,
-    phase:'play', arriveT:0,
+    phase:'play', arriveT:0, introT:2.2,
     snow:[], rays:[], currents:[], curT:1.5,
     ended:false };
   for(let i=0;i<70;i++)G.snow.push({x:Math.random()*W,y:Math.random()*H,z:0.3+Math.random()*0.7,ph:Math.random()*6.28});
@@ -323,7 +323,7 @@ function arrivalStep(f,ds){
 }
 function update(f,ds){
   if(G.phase==='arrive'){ arrivalStep(f,ds); return; }
-  G.t+=ds; G.px=G.x; G.py=G.y;
+  G.t+=ds; if(G.introT>0)G.introT-=ds; G.px=G.x; G.py=G.y;
   G.x+=(target.x-G.x)*G.speed*f; G.y+=(target.y-G.y)*G.speed*f;
   const dx=G.x-G.px, dy=G.y-G.py, spd=Math.hypot(dx,dy), stretch=Math.min(0.32,spd*0.011);
   G.scaleX+=((1+stretch)-G.scaleX)*0.2*f; G.scaleY+=((1-stretch*0.7)-G.scaleY)*0.2*f;
@@ -404,14 +404,31 @@ function drawBlob(g,cx,cy,pr,grade,sx,sy,murk,t){
     g.arc(Math.sin(i*2+t)*pr*0.55,Math.cos(i*3+t)*pr*0.55,2,0,6.28); g.fillStyle='#352718'; g.fill(); } g.globalAlpha=1; }
   g.restore();
 }
+const MOOD={
+  kuroshio:{ray:1.0,snow:'#dfe9ff',snowA:1,biolum:0,caustic:0,tint:null},
+  amami:{ray:1.0,snow:'#d7f0e2',snowA:1,biolum:0,caustic:0.5,tint:'rgba(40,120,110,0.05)'},
+  okinawa:{ray:1.4,snow:'#e8f7ff',snowA:1,biolum:0,caustic:1.0,tint:'rgba(40,150,170,0.06)'},
+  tokunoshima:{ray:0.8,snow:'#dbe2ff',snowA:1,biolum:0.35,caustic:0,tint:'rgba(60,70,140,0.05)'},
+  chiba:{ray:0.5,snow:'#cfd6e0',snowA:0.85,biolum:0,caustic:0,tint:'rgba(70,72,82,0.08)'},
+  shinkai:{ray:0.12,snow:'#9fd8ff',snowA:0.7,biolum:1.0,caustic:0,tint:'rgba(0,8,26,0.20)'},
+};
+const RSUB={kuroshio:'黒潮の本流へ',amami:'珊瑚の島の海',okinawa:'光あふれる浅瀬',tokunoshima:'月明かりの環礁',chiba:'暮らしに近い海',shinkai:'光届かぬ深み'};
 function drawAmbient(){
   if(!G||!G.snow) return;
+  const R=(G.running?G.region:rById(selRegion)), m=MOOD[R.id]||MOOD.kuroshio, now=performance.now();
+  if(m.tint){ ctx.fillStyle=m.tint; ctx.fillRect(-20,-20,W+40,H+40); }
   // god-rays from surface
-  for(const r of G.rays){ r.ph+=r.sp*16; const sway=Math.sin(r.ph)*40;
+  if(m.ray>0.05) for(const r of G.rays){ r.ph+=r.sp*16; const sway=Math.sin(r.ph)*40;
     ctx.save(); ctx.globalCompositeOperation='lighter';
-    const grd=ctx.createLinearGradient(0,0,0,H*0.92); grd.addColorStop(0,'rgba(200,225,255,0.07)'); grd.addColorStop(1,'rgba(200,225,255,0)');
+    const grd=ctx.createLinearGradient(0,0,0,H*0.92); grd.addColorStop(0,'rgba(200,225,255,'+(0.07*m.ray)+')'); grd.addColorStop(1,'rgba(200,225,255,0)');
     ctx.fillStyle=grd; ctx.beginPath(); ctx.moveTo(r.x+sway-r.w/2,0); ctx.lineTo(r.x+sway+r.w/2,0);
     ctx.lineTo(r.x+sway+r.w*1.6,H*0.92); ctx.lineTo(r.x+sway-r.w*1.6,H*0.92); ctx.closePath(); ctx.fill(); ctx.restore(); }
+  // caustics (sunny shallows)
+  if(m.caustic>0){ ctx.save(); ctx.globalCompositeOperation='lighter'; const t=now/1000;
+    for(let i=0;i<3;i++){ const y=H*(0.5+i*0.16); ctx.beginPath(); ctx.moveTo(0,y);
+      for(let x=0;x<=W;x+=22) ctx.lineTo(x, y+Math.sin(x*0.018+t*1.4+i*1.3)*12*m.caustic+Math.sin(x*0.05+t*0.8)*6);
+      ctx.strokeStyle='rgba(190,235,255,'+(0.05*m.caustic)+')'; ctx.lineWidth=7; ctx.stroke(); }
+    ctx.restore(); }
   // drifting current streaks
   G.curT-=0.016; if(G.curT<=0){ G.curT=2.5+Math.random()*3; const dir=Math.random()<0.5?1:-1;
     G.currents.push({y:60+Math.random()*(H-120),dir,x:dir>0?-240:W+240,sp:0.9+Math.random()*1.3,len:160+Math.random()*200,a:0.05+Math.random()*0.05}); }
@@ -420,10 +437,13 @@ function drawAmbient(){
     grd.addColorStop(0.5,'rgba(175,205,255,'+c.a+')'); grd.addColorStop(1,'rgba(175,205,255,0)');
     ctx.fillStyle=grd; ctx.fillRect(c.x-c.len,c.y-1.5,c.len*2,3);
     if((c.dir>0&&c.x>W+280)||(c.dir<0&&c.x<-280))G.currents.splice(i,1); }
-  // marine snow
+  // marine snow / bioluminescence
   for(const s of G.snow){ s.y+=0.15+s.z*0.5; s.x+=Math.sin(s.ph)*0.2; s.ph+=0.02;
     if(s.y>H+6){s.y=-6;s.x=Math.random()*W;}
-    ctx.globalAlpha=0.12+s.z*0.25; ctx.beginPath(); ctx.arc(s.x,s.y,s.z*1.6,0,6.28); ctx.fillStyle='#dfe9ff'; ctx.fill(); }
+    if(m.biolum>0){ const pulse=0.45+0.55*Math.sin(s.ph*2+now/600);
+      ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=((0.14+s.z*0.3)*pulse*m.biolum+0.03);
+      ctx.shadowBlur=9*m.biolum; ctx.shadowColor=m.snow; ctx.beginPath(); ctx.arc(s.x,s.y,s.z*1.8,0,6.28); ctx.fillStyle=m.snow; ctx.fill(); ctx.restore(); }
+    else { ctx.globalAlpha=(0.12+s.z*0.25)*m.snowA; ctx.beginPath(); ctx.arc(s.x,s.y,s.z*1.6,0,6.28); ctx.fillStyle=m.snow; ctx.fill(); } }
   ctx.globalAlpha=1;
 }
 function render(){
@@ -467,6 +487,13 @@ function render(){
       ctx.globalAlpha=a; ctx.fillStyle='rgba(255,245,222,'+a+')'; ctx.textAlign='center';
       ctx.font='600 '+Math.round(Math.min(W,H)*0.07)+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
       ctx.fillText('漂着',G.x,G.y-pr-28); ctx.globalAlpha=1; ctx.textAlign='left'; }
+    if(G.introT>0){ const it=G.introT; let a=it>1.6?(2.2-it)/0.6:(it<0.6?it/0.6:1); a=Math.max(0,Math.min(1,a));
+      ctx.globalAlpha=a; ctx.textAlign='center';
+      ctx.fillStyle='rgba(232,211,164,'+a+')'; ctx.font='600 '+Math.round(Math.min(W,H)*0.055)+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
+      ctx.fillText(G.region.name,W/2,H*0.27);
+      ctx.fillStyle='rgba(238,243,251,'+(a*0.66)+')'; ctx.font='400 '+Math.round(Math.min(W,H)*0.021)+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
+      ctx.fillText(RSUB[G.region.id]||'',W/2,H*0.27+Math.min(W,H)*0.05);
+      ctx.globalAlpha=1; ctx.textAlign='left'; }
     for(const q of G.pops){ ctx.globalAlpha=Math.max(0,q.life); ctx.font='600 '+q.size+'px '+getComputedStyle(document.body).getPropertyValue('--serif');
       ctx.fillStyle=q.color; ctx.textAlign='center'; ctx.fillText(q.text,q.x,q.y); } ctx.globalAlpha=1; ctx.textAlign='left';
   } else {
