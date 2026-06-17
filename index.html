@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- v0.12 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<!-- v0.13 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
 <meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="龍涎香ドリフト">
@@ -126,8 +126,17 @@
       <button class="btn ghost" id="regionBtn">海域</button>
       <button class="btn ghost" id="shopBtn">強化</button>
       <button class="btn ghost" id="codexBtn">図鑑</button>
+      <button class="btn ghost" id="meiskoBtn">銘香</button>
       <button class="btn ghost" id="achBtn">実績</button>
     </div>
+  </div>
+
+  <!-- 銘香 COLLECTION -->
+  <div id="meiskoPanel" class="panel hidden">
+    <h1 class="small">銘香コレクション</h1>
+    <div class="essence">発見 &nbsp;<b id="meiskoCount">0</b> / <b id="meiskoTotal">0</b></div>
+    <div class="grid" id="meiskoGrid"></div>
+    <button class="btn ghost back" data-home>もどる</button>
   </div>
 
   <!-- ACHIEVEMENTS -->
@@ -210,7 +219,7 @@ addEventListener('resize',resize); resize();
 
 // ===================== SAVE =====================
 const SAVE_KEY='drift_save_v1';
-function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}, best:{}, daily:{}, endlessBest:0, ach:{}}; }
+function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}, best:{}, daily:{}, endlessBest:0, ach:{}, meisko:{}, streak:{count:0,last:''}, prestige:0}; }
 let SAVE; try{ SAVE=Object.assign(def(),JSON.parse(localStorage.getItem(SAVE_KEY))||{}); SAVE.perks=Object.assign(def().perks,SAVE.perks||{}); }catch(e){ SAVE=def(); }
 function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE)); }catch(e){} }
 function fmtTime(t){ const s=Math.floor(t); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
@@ -239,6 +248,29 @@ const ACHS=[
 ];
 function checkAchievements(c){ SAVE.ach=SAVE.ach||{}; const got=[];
   ACHS.forEach(a=>{ if(!SAVE.ach[a.id] && a.test(c)){ SAVE.ach[a.id]=1; got.push(a.name); } }); return got; }
+function yesterdayKey(){ const d=new Date(); d.setDate(d.getDate()-1); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+const MEISKO=[
+  {id:'white',name:'白龍涎',hint:'塩を多く吸い、よく熟成して漂着',test:c=>c.good&&c.dom==='salt'&&c.grade>0.8&&c.pure>0.9},
+  {id:'gold',name:'黄金龍涎',hint:'太陽を多く吸い、よく熟成して漂着',test:c=>c.good&&c.dom==='sun'&&c.grade>0.8},
+  {id:'blue',name:'蒼龍涎',hint:'月光を多く吸い、熟成して漂着',test:c=>c.good&&c.dom==='moon'&&c.grade>0.7},
+  {id:'green',name:'碧龍涎',hint:'海藻を多く吸って漂着',test:c=>c.good&&c.dom==='weed'&&c.grade>0.5},
+  {id:'black',name:'黒龍涎',hint:'ほとんど熟成せず若いまま漂着',test:c=>c.good&&c.grade<0.18},
+  {id:'whale',name:'鯨涎香',hint:'鯨の記憶を宿して★5で漂着',test:c=>c.good&&c.whale&&c.stars>=5},
+  {id:'abyss',name:'深淵香',hint:'深海で漂着する',test:c=>c.good&&c.region==='深海'},
+  {id:'pure',name:'無垢龍涎',hint:'濁りゼロで漂着する',test:c=>c.good&&c.murk<1},
+  {id:'storm',name:'嵐越えの香',hint:'濁り60%以上でも漂着しきる',test:c=>c.good&&c.murk>=60},
+  {id:'giant',name:'巨涎',hint:'1回で120個以上吸収する',test:c=>c.absorbed>=120},
+  {id:'chain',name:'連珠の香',hint:'コンボ30以上を達成',test:c=>c.maxCombo>=30},
+  {id:'amami',name:'奄美の銘',hint:'奄美で漂着する',test:c=>c.good&&c.region==='奄美'},
+  {id:'okinawa',name:'沖縄の銘',hint:'沖縄で漂着する',test:c=>c.good&&c.region==='沖縄'},
+  {id:'tokuno',name:'徳之島の銘',hint:'徳之島で漂着する',test:c=>c.good&&c.region==='徳之島'},
+  {id:'chiba',name:'千葉の銘',hint:'千葉で漂着する',test:c=>c.good&&c.region==='千葉'},
+  {id:'endless',name:'深淵の主',hint:'エンドレスで3分生存する',test:c=>c.endless&&c.t>=180},
+  {id:'daily',name:'今日の銘',hint:'今日の海で漂着する',test:c=>c.good&&c.mode==='daily'},
+  {id:'master',name:'熟成師の香',hint:'スコア1800に到達',test:c=>c.score>=1800},
+];
+function checkMeisko(c,vis){ SAVE.meisko=SAVE.meisko||{}; const got=[];
+  MEISKO.forEach(m=>{ if(!SAVE.meisko[m.id] && m.test(c)){ SAVE.meisko[m.id]={vis,name:m.name}; got.push(m.name); } }); return got; }
 
 // ===================== DATA =====================
 const REGIONS=[
@@ -318,8 +350,8 @@ function newGame(regionId){
     baseR:14, grow:0, displayR:14,
     ring:96*(1+P.ring0*0.06), speed:0.13,
     xp:0,xpNext:6,level:1, murk:0, murkMul:1-P.murkres*0.08,
-    shield:P.shield0, cleanse:0, moonPull:1, xpMult:1+P.xp0*0.06,
-    essenceMul:1+P.essence0*0.10, pollMul:R.pollMul||1,
+    shield:P.shield0, cleanse:0, moonPull:1, xpMult:(1+P.xp0*0.06)*(1+0.10*(SAVE.prestige||0)),
+    essenceMul:(1+P.essence0*0.10)*(1+0.20*(SAVE.prestige||0)), pollMul:R.pollMul||1, prestigeMul:1+0.10*(SAVE.prestige||0),
     combo:0,comboT:0,
     mats:[],polls:[],parts:[],pops:[],trail:[],
     counts:{moon:0,sun:0,weed:0,salt:0,microbe:0,whale:0}, absorbed:0,
@@ -707,14 +739,31 @@ function generateScent(good){
 }
 
 // ===================== SCREENS =====================
-const PANELS=['homePanel','regionPanel','shopPanel','codexPanel','detailPanel','achPanel','upPanel','endPanel'];
+const PANELS=['homePanel','regionPanel','shopPanel','codexPanel','detailPanel','meiskoPanel','achPanel','upPanel','endPanel'];
 function show(id){ PANELS.forEach(p=>document.getElementById(p).classList.add('hidden')); if(id)document.getElementById(id).classList.remove('hidden'); }
 
 function showHome(){ stopPad(); document.getElementById('homeEssence').textContent=SAVE.essence;
   document.getElementById('homeRegion').textContent='海域：'+rById(selRegion).name;
   const di=dailyInfo(), db=(SAVE.daily&&SAVE.daily.date===di.key)?SAVE.daily.best:0;
-  document.getElementById('homeDaily').textContent='今日の海：'+di.region.name+'・'+di.mod.name+'（'+di.mod.desc+'）'+(db?'　自己ベスト '+db:'');
+  const stk=(SAVE.streak&&SAVE.streak.count&&(SAVE.streak.last===di.key||SAVE.streak.last===yesterdayKey()))?SAVE.streak.count:0;
+  document.getElementById('homeDaily').textContent='今日の海：'+di.region.name+'・'+di.mod.name+'（'+di.mod.desc+'）'+(db?'　自己ベスト '+db:'')+(stk?'　連続'+stk+'日':'');
   document.getElementById('regionName').textContent=rById(selRegion).name; show('homePanel'); }
+function renderMeisko(){ SAVE.meisko=SAVE.meisko||{}; const got=MEISKO.filter(m=>SAVE.meisko[m.id]).length;
+  document.getElementById('meiskoCount').textContent=got; document.getElementById('meiskoTotal').textContent=MEISKO.length;
+  const box=document.getElementById('meiskoGrid'); box.innerHTML='';
+  MEISKO.forEach((m,idx)=>{ const e=SAVE.meisko[m.id]; const d=document.createElement('div'); d.className='gx'+(e?'':' locked');
+    if(e){ const cvn=document.createElement('canvas'); cvn.width=120; cvn.height=120; cvn.className='gthumb';
+      drawPearlThumb(cvn.getContext('2d'),120,e.vis,m.name);
+      const tx=document.createElement('div'); tx.className='gtext';
+      tx.innerHTML='<div class="gn">'+m.name+'</div><div class="gp">'+m.hint+'</div>';
+      d.appendChild(cvn); d.appendChild(tx);
+    } else {
+      const ph=document.createElement('div'); ph.className='gthumb'; ph.style.cssText='display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:34px;color:rgba(217,184,119,.4)'; ph.textContent='？';
+      const tx=document.createElement('div'); tx.className='gtext';
+      tx.innerHTML='<div class="gn" style="opacity:.55">？？？</div><div class="gp">'+m.hint+'</div>';
+      d.appendChild(ph); d.appendChild(tx);
+    }
+    box.appendChild(d); }); }
 function renderAch(){ SAVE.ach=SAVE.ach||{}; const got=ACHS.filter(a=>SAVE.ach[a.id]).length;
   document.getElementById('achCount').textContent=got; document.getElementById('achTotal').textContent=ACHS.length;
   const box=document.getElementById('achList'); box.innerHTML='';
@@ -739,7 +788,16 @@ function renderShop(){ document.getElementById('shopEssence').textContent=SAVE.e
       '<span class="meta">'+(maxed?'MAX':'➤ '+cost)+'</span></div>'+
       '<div class="dsc">'+P.dsc+'（現在 '+P.eff(lv)+'）</div>';
     d.onclick=()=>{ if(maxed)return; if(SAVE.essence>=cost){ SAVE.essence-=cost; SAVE.perks[P.id]=lv+1; save(); renderShop(); } };
-    box.appendChild(d); }); }
+    box.appendChild(d); });
+  const allMax=PERKS.every(p=>(SAVE.perks[p.id]||0)>=p.max), pl=SAVE.prestige||0;
+  const d=document.createElement('div'); d.className='card'+(allMax?'':' locked');
+  d.style.borderColor='rgba(217,184,119,.5)';
+  d.innerHTML='<div class="ttl">🜂 継承（プレステージ）<span style="opacity:.6;font-size:12px"> 現在 Lv.'+pl+'</span>'+
+    '<span class="meta">'+(allMax?'実行':'要・全強化MAX')+'</span></div>'+
+    '<div class="dsc">全強化をリセットし、恒久ボーナス＋20%エキス／＋10%熟成を得る（重複）。現在の継承効果：エキス+'+(pl*20)+'%・熟成+'+(pl*10)+'%</div>';
+  d.onclick=()=>{ if(!allMax)return; if(!confirm('全強化をリセットして継承しますか？（恒久ボーナスを得ます）'))return;
+    SAVE.prestige=(SAVE.prestige||0)+1; PERKS.forEach(p=>SAVE.perks[p.id]=0); save(); renderShop(); };
+  box.appendChild(d); }
 
 function renderCodex(){ const keys=Object.keys(SAVE.codex); document.getElementById('codexCount').textContent=keys.length;
   const box=document.getElementById('codexGrid'); box.innerHTML='';
@@ -800,11 +858,17 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
     headline=good?'漂着しました':'濁ってしまった…';
     if(isBest)extra='<span style="color:#e8d3a4">★最高記録</span>　';
     if(G.mode==='daily'){ SAVE.daily=SAVE.daily||{}; if(SAVE.daily.date!==G.dailyKey)SAVE.daily={date:G.dailyKey,best:0};
-      if(score>SAVE.daily.best)SAVE.daily.best=score; extra+='今日の海ベスト '+SAVE.daily.best+'　'; }
+      if(score>SAVE.daily.best)SAVE.daily.best=score; extra+='今日の海ベスト '+SAVE.daily.best+'　';
+      SAVE.streak=SAVE.streak||{count:0,last:''}; const tk=todayKey();
+      if(SAVE.streak.last!==tk){ SAVE.streak.count=(SAVE.streak.last===yesterdayKey())?SAVE.streak.count+1:1; SAVE.streak.last=tk;
+        const sb=Math.min(300,SAVE.streak.count*15); SAVE.essence+=sb; extra+='<span style="color:#e8d3a4">連続'+SAVE.streak.count+'日 +'+sb+'</span>　'; } }
   }
   const ex=SAVE.codex[s.name]; if((good||G.endless)&&(!ex||s.stars>ex.stars)) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region,state:s.state,vis:s.vis};
   const rank = score>=1600?'龍涎香の達人': score>=1000?'熟成師': score>=500?'漂流者':'見習い';
-  const got=checkAchievements({good:good&&!G.endless,stars:s.stars,maxCombo:G.maxCombo||0,whale:(G.counts.whale||0)>0,murk:G.murk,absorbed:G.absorbed,grade,score,endless:!!G.endless,t:G.t});
+  const ctx2={good:good&&!G.endless,stars:s.stars,maxCombo:G.maxCombo||0,whale:(G.counts.whale||0)>0,murk:G.murk,absorbed:G.absorbed,grade,score,endless:!!G.endless,t:G.t,
+    dom:s.vis.dom,pure:s.vis.pure,region:G.region.name,mode:G.mode};
+  const got=checkAchievements(ctx2);
+  const gotM=checkMeisko(ctx2,s.vis);
   SAVE.tutDone=1; save();
   document.getElementById('endTitle').textContent=headline;
   document.getElementById('sName').textContent=s.name;
@@ -812,7 +876,7 @@ function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPa
   document.getElementById('sNote').textContent='ノート：'+s.note;
   document.getElementById('sPlace').textContent='漂着地：'+s.place+'（'+s.region+'）';
   document.getElementById('sState').textContent='状態：'+s.state;
-  document.getElementById('earned').innerHTML='エキス +'+earned+'　／　スコア <b style="color:#fff">'+score+'</b>　［'+rank+'］<br>'+extra+'最高コンボ '+(G.maxCombo||0)+'　所持 '+SAVE.essence+(got.length?'<br><span style="color:#e8d3a4">実績解除：'+got.join('・')+'</span>':'');
+  document.getElementById('earned').innerHTML='エキス +'+earned+'　／　スコア <b style="color:#fff">'+score+'</b>　［'+rank+'］<br>'+extra+'最高コンボ '+(G.maxCombo||0)+'　所持 '+SAVE.essence+(gotM.length?'<br><span style="color:#ffe6a0">銘香発見：'+gotM.join('・')+'</span>':'')+(got.length?'<br><span style="color:#e8d3a4">実績解除：'+got.join('・')+'</span>':'');
   show('endPanel');
 }
 
@@ -851,6 +915,7 @@ document.getElementById('regionBtn').onclick=()=>{ renderRegions(); show('region
 document.getElementById('shopBtn').onclick=()=>{ renderShop(); show('shopPanel'); };
 document.getElementById('codexBtn').onclick=()=>{ renderCodex(); show('codexPanel'); };
 document.getElementById('achBtn').onclick=()=>{ renderAch(); show('achPanel'); };
+document.getElementById('meiskoBtn').onclick=()=>{ renderMeisko(); show('meiskoPanel'); };
 document.querySelectorAll('[data-home]').forEach(b=>b.onclick=showHome);
 function downloadShare(s){ const url=drawShare(s); const a=document.createElement('a'); a.href=url; a.download='龍涎香_'+s.name+'.png'; document.body.appendChild(a); a.click(); a.remove(); }
 document.getElementById('shareBtn').onclick=()=>{ if(lastScent)downloadShare(lastScent); };
