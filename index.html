@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- v0.11 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<!-- v0.12 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
 <meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="龍涎香ドリフト">
@@ -326,6 +326,7 @@ function newGame(regionId){
     spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0,
     phase:'play', arriveT:0, introT:2.2, tut:!SAVE.tutDone, seed:Math.floor(Math.random()*997)+1, maxCombo:0,
     mode:'normal', endless:false, matRate:1, dailyBias:null, dailyKey:null,
+    surgeT:15, surgeCount:0, pulse:0, pulseT:0, sats:[],
     snow:[], rays:[], currents:[], curT:1.5, whaleT:6, whaleShadow:null,
     ended:false };
   for(let i=0;i<70;i++)G.snow.push({x:Math.random()*W,y:Math.random()*H,z:0.3+Math.random()*0.7,ph:Math.random()*6.28});
@@ -337,19 +338,41 @@ function targetR(){ return G.baseR + Math.sqrt(G.grow)*2.7; }
 function edgePos(m){ const e=Math.floor(Math.random()*4);
   if(e===0)return{x:-m,y:Math.random()*H}; if(e===1)return{x:W+m,y:Math.random()*H};
   if(e===2)return{x:Math.random()*W,y:-m}; return{x:Math.random()*W,y:H+m}; }
+function pickMatType(){ const base={microbe:0.10,moon:0.22,salt:0.22,weed:0.24,sun:0.22}, bias=Object.assign({},G.region.bias||{},G.dailyBias||{});
+  let tot=0,w={}; for(const k in base){ w[k]=base[k]*(bias[k]||1); tot+=w[k]; }
+  let r=Math.random()*tot, k='sun'; for(const key in w){ if(r<w[key]){k=key;break;} r-=w[key]; } return k; }
 function spawnMat(){
-  if(Math.random()<0.022){ // rare 鯨の記憶
-    const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5), sp=0.14+Math.random()*0.18;
+  if(Math.random()<0.022){ const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5), sp=0.14+Math.random()*0.18;
     G.mats.push({type:'whale',x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,pv:0,pop:0,...MATS.whale}); return; }
-  const base={microbe:0.10,moon:0.22,salt:0.22,weed:0.24,sun:0.22}, bias=Object.assign({},G.region.bias||{},G.dailyBias||{});
-  let tot=0, w={}; for(const k in base){ w[k]=base[k]*(bias[k]||1); tot+=w[k]; }
-  let r=Math.random()*tot, k='sun'; for(const key in w){ if(r<w[key]){k=key;break;} r-=w[key]; }
-  const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5)*1.2, sp=0.2+Math.random()*0.3;
+  const k=pickMatType(); const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5)*1.2, sp=0.2+Math.random()*0.3;
   G.mats.push({type:k,x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,pv:0,pop:0,...MATS[k]});
 }
 function spawnPoll(){ const keys=Object.keys(POLL), k=keys[Math.floor(Math.random()*keys.length)];
   const p=edgePos(30), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5), sp=0.25+Math.random()*0.4+G.t*0.002;
   G.polls.push({type:k,x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,hit:false,...POLL[k]}); }
+function triggerSurge(){ if(!G||!G.running)return; G.surgeCount=(G.surgeCount||0)+1; const treasure=G.surgeCount%3===0;
+  pop(G.x,G.y-G.displayR-44, treasure?'宝の潮目':'潮目', treasure?'#ffe6a0':'#9fe0ff', true);
+  ringFx(G.x,G.y, treasure?'#ffe6a0':'#9fe0ff');
+  const R=Math.min(W,H)*0.55, N=treasure?16:14;
+  for(let i=0;i<N;i++){ const a=i/N*6.283185+Math.random()*0.25, x=G.x+Math.cos(a)*R, y=G.y+Math.sin(a)*R, k=pickMatType();
+    G.mats.push({type:k,x,y,vx:0,vy:0,pv:0,pop:0,...MATS[k]}); }
+  if(treasure){ const a=Math.random()*6.283185; G.mats.push({type:'whale',x:G.x+Math.cos(a)*R,y:G.y+Math.sin(a)*R,vx:0,vy:0,pv:0,pop:0,...MATS.whale}); }
+  for(let i=0;i<3;i++) spawnPoll();
+}
+function absorbMaterial(m){ const pr=G.displayR;
+  G.counts[m.type]=(G.counts[m.type]||0)+1; G.absorbed++; G.combo++; if(G.combo>G.maxCombo)G.maxCombo=G.combo; G.comboT=1.4; updateCombo();
+  const mult=1+Math.min(G.combo,15)*0.06;
+  if(m.type==='whale'){ G.grow+=9*mult; G.xp+=7*G.xpMult*mult; G.bump=Math.min(0.85,G.bump+0.42);
+    burst(m.x,m.y,'#ffcf66',24,3.4); ringFx(m.x,m.y,'#ffe9b0'); ringFx(G.x,G.y,'#ffcf66'); pop(m.x,m.y-12,'鯨の記憶','#ffe6a0',true); sGrow(); sLevel(); }
+  else { G.grow+=mult; G.xp+=(m.type==='microbe'?2:1)*G.xpMult*mult; G.bump=Math.min(0.5,G.bump+0.16);
+    burst(m.x,m.y,m.glow,m.type==='microbe'?14:8,2.2); pop(m.x,m.y-8,'+'+(G.combo>1?G.combo:1),m.glow,G.combo>=5); sAbsorb(G.combo); }
+  G.scaleY+=0.12; G.scaleX-=0.06;
+  if(G.mileIdx<MILE.length&&G.absorbed>=MILE[G.mileIdx]){ G.mileIdx++; ringFx(G.x,G.y,'#e8d3a4'); pop(G.x,G.y-pr-18,'育った','#e8d3a4',true); sGrow(); G.bump=Math.min(0.7,G.bump+0.3); }
+  if(G.xp>=G.xpNext){ G.xp-=G.xpNext; G.level++; G.xpNext=Math.round(G.xpNext*1.35+3);
+    const el=document.getElementById('lvl'); el.textContent='Lv.'+G.level; el.style.transform='scale(1.4)'; setTimeout(()=>el.style.transform='',150);
+    G.levelFlash=0.4; ringFx(G.x,G.y,'#cdb6e0'); ringFx(G.x,G.y,'#8fd6e8'); sLevel(); offerUpgrades(); return true; }
+  return false;
+}
 
 // ===================== UPGRADES (in-run) =====================
 const UPGRADES=[
@@ -359,6 +382,8 @@ const UPGRADES=[
   {ico:'✨',ttl:'浄化フィールド',dsc:'濁りが時間でゆっくり減る。耐久型。',apply:()=>G.cleanse+=0.7},
   {ico:'🌿',ttl:'海藻シールド',dsc:'汚染ダメージを3回まで無効化する。',apply:()=>G.shield+=3},
   {ico:'⏱',ttl:'微生物加速',dsc:'熟成（EXP獲得）が速くなる。雪だるま式。',apply:()=>G.xpMult*=1.35},
+  {ico:'💠',ttl:'波動',dsc:'周囲の汚染を弾き飛ばす波を放つ。重ねるほど速く広く。',apply:()=>{G.pulse=(G.pulse||0)+1; if(G.pulseT<=0)G.pulseT=2;}},
+  {ico:'🜁',ttl:'分け身',dsc:'分身の龍涎香が周りを回り、素材を集める。重ねると増える。',apply:()=>{G.sats.push({ang:Math.random()*6.283185,x:G.x,y:G.y});}},
 ];
 function offerUpgrades(){ G.running=false;
   const pool=[...UPGRADES].sort(()=>Math.random()-0.5).slice(0,3), box=document.getElementById('cards'); box.innerHTML='';
@@ -409,31 +434,26 @@ function update(f,ds){
   G.spawnT-=ds; G.pollT-=ds;
   if(G.spawnT<=0){ spawnMat(); G.spawnT=0.42/(G.matRate||1); }
   if(G.pollT<=0){ spawnPoll(); G.pollT=Math.max(G.endless?0.24:0.5,1.6-G.t*0.012)/G.pollMul; }
+  // 潮目（サージ）
+  G.surgeT-=ds; if(G.surgeT<=0){ triggerSurge(); G.surgeT=15+Math.random()*6; }
 
   const pr=G.displayR;
+  // 分け身の位置更新
+  const orbit=pr+44; G.sats.forEach((s,k)=>{ s.ang=(s.ang||0)+0.045*f; s.x=G.x+Math.cos(s.ang)*orbit; s.y=G.y+Math.sin(s.ang)*orbit; });
   for(let i=G.mats.length-1;i>=0;i--){ const m=G.mats[i];
-    const mx=G.x-m.x, my=G.y-m.y, dist=Math.hypot(mx,my)||0.01, pull=(m.type==='moon')?G.ring*G.moonPull:G.ring;
     if(m.pop<1)m.pop+=0.15*f;
+    let tx=G.x, ty=G.y, pull=(m.type==='moon')?G.ring*G.moonPull:G.ring, absorbR=pr;
+    const dP=Math.hypot(G.x-m.x,G.y-m.y);
+    for(const s of G.sats){ const sd=Math.hypot(s.x-m.x,s.y-m.y); if(sd<88 && sd<dP){ tx=s.x; ty=s.y; pull=88; absorbR=14; } }
+    const mx=tx-m.x, my=ty-m.y, dist=Math.hypot(mx,my)||0.01;
     if(dist<pull){ const cl=1-dist/pull; m.pv+=(0.6+cl*2.4)*f; const step=Math.min(dist,m.pv*f); m.x+=mx/dist*step; m.y+=my/dist*step; }
     else { m.x+=m.vx*f; m.y+=m.vy*f; m.pv=0; }
-    if(dist<pr+m.r){
-      G.counts[m.type]=(G.counts[m.type]||0)+1; G.absorbed++; G.combo++; if(G.combo>G.maxCombo)G.maxCombo=G.combo; G.comboT=1.4; updateCombo();
-      const mult=1+Math.min(G.combo,15)*0.06;
-      if(m.type==='whale'){ G.grow+=9*mult; G.xp+=7*G.xpMult*mult; G.bump=Math.min(0.85,G.bump+0.42);
-        burst(m.x,m.y,'#ffcf66',24,3.4); ringFx(m.x,m.y,'#ffe9b0'); ringFx(G.x,G.y,'#ffcf66'); pop(m.x,m.y-12,'鯨の記憶','#ffe6a0',true); sGrow(); sLevel(); }
-      else { G.grow+=mult; G.xp+=(m.type==='microbe'?2:1)*G.xpMult*mult; G.bump=Math.min(0.5,G.bump+0.16);
-        burst(m.x,m.y,m.glow,m.type==='microbe'?14:8,2.2); pop(m.x,m.y-8,'+'+(G.combo>1?G.combo:1),m.glow,G.combo>=5); sAbsorb(G.combo); }
-      G.scaleY+=0.12; G.scaleX-=0.06;
-      G.mats.splice(i,1);
-      if(G.mileIdx<MILE.length&&G.absorbed>=MILE[G.mileIdx]){ G.mileIdx++; ringFx(G.x,G.y,'#e8d3a4'); pop(G.x,G.y-pr-18,'育った','#e8d3a4',true); sGrow(); G.bump=Math.min(0.7,G.bump+0.3); }
-      if(G.xp>=G.xpNext){ G.xp-=G.xpNext; G.level++; G.xpNext=Math.round(G.xpNext*1.35+3);
-        const el=document.getElementById('lvl'); el.textContent='Lv.'+G.level; el.style.transform='scale(1.4)'; setTimeout(()=>el.style.transform='',150);
-        G.levelFlash=0.4; ringFx(G.x,G.y,'#cdb6e0'); ringFx(G.x,G.y,'#8fd6e8'); sLevel(); offerUpgrades(); return; }
-      continue;
-    }
+    if(dist<absorbR+m.r){ G.mats.splice(i,1); if(absorbMaterial(m))return; continue; }
     if(m.x<-60||m.x>W+60||m.y<-60||m.y>H+60)G.mats.splice(i,1);
   }
-  for(let i=G.polls.length-1;i>=0;i--){ const p=G.polls[i]; p.x+=p.vx*f; p.y+=p.vy*f;
+  for(let i=G.polls.length-1;i>=0;i--){ const p=G.polls[i];
+    if(p.type==='oil'&&!p.hit){ const a=Math.atan2(G.y-p.y,G.x-p.x); p.vx+=Math.cos(a)*0.05*f; p.vy+=Math.sin(a)*0.05*f; const sp=Math.hypot(p.vx,p.vy); if(sp>1.6){ p.vx*=1.6/sp; p.vy*=1.6/sp; } }
+    p.x+=p.vx*f; p.y+=p.vy*f;
     const dist=Math.hypot(G.x-p.x,G.y-p.y);
     if(!p.hit&&dist<pr+p.r){ p.hit=true;
       if(G.shield>0){ G.shield--; burst(p.x,p.y,'#9ce0bb',12,2.5); pop(p.x,p.y,'シールド','#9ce0bb'); }
@@ -442,6 +462,10 @@ function update(f,ds){
         const a=Math.atan2(G.y-p.y,G.x-p.x); G.x+=Math.cos(a)*12; G.y+=Math.sin(a)*12; } }
     if(p.x<-80||p.x>W+80||p.y<-80||p.y>H+80)G.polls.splice(i,1);
   }
+  // 波動（アクティブ）
+  if(G.pulse>0){ G.pulseT-=ds; if(G.pulseT<=0){ G.pulseT=Math.max(1.6,5-(G.pulse-1)*0.7);
+    const R=150+G.pulse*45; ringFx(G.x,G.y,'#9fe0ff'); ringFx(G.x,G.y,'#cfe9ff'); sGrow();
+    for(const p of G.polls){ const d=Math.hypot(G.x-p.x,G.y-p.y); if(d<R){ const a=Math.atan2(p.y-G.y,p.x-G.x)||0; p.vx=Math.cos(a)*7; p.vy=Math.sin(a)*7; p.hit=true; burst(p.x,p.y,'#9fe0ff',6,2); } } } }
   if(G.cleanse>0&&G.murk>0)G.murk=Math.max(0,G.murk-G.cleanse*ds*4);
   G.shake*=Math.pow(0.85,f);
   for(let i=G.parts.length-1;i>=0;i--){ const pt=G.parts[i];
@@ -620,6 +644,8 @@ function render(){
       ctx.restore(); }
     for(const pt of G.parts){ if(pt.isRing)continue; ctx.globalAlpha=Math.max(0,pt.life);
       ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.r||2.4,0,6.28); ctx.fillStyle=pt.color; ctx.fill(); } ctx.globalAlpha=1;
+    for(const s of G.sats){ if(s.x!=null){ ctx.beginPath(); ctx.arc(s.x,s.y,12,0,6.283185); ctx.strokeStyle='rgba(217,184,119,0.12)'; ctx.lineWidth=1;
+      drawAmbergris(ctx,s.x,s.y,Math.min(20,9+G.absorbed/26),{grade:Math.min(1,G.absorbed/130),pure:1,whale:false,seed:G.seed+Math.round(s.ang*5)+3}); } }
     drawBlob(ctx,G.x,G.y,pr,Math.min(1,G.absorbed/130),G.scaleX,G.scaleY,G.murk,G.t,G.seed,G.counts.whale>0);
     if(G.phase==='arrive'){ const a=Math.min(1,G.arriveT/1.2); ctx.save(); ctx.globalCompositeOperation='lighter';
       const bg=ctx.createRadialGradient(G.x,G.y,0,G.x,G.y,Math.max(W,H)*0.7*a+90);
