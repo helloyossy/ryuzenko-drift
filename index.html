@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<!-- v0.10 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
+<!-- v0.11 --><title>龍涎香ドリフト — 海を漂い、育ち、香りになる</title>
 <meta name="description" content="海をさまよう龍涎香を操り、月光や海藻を吸い込んで育て、汚染を避けて浜へ漂着させるローグライト。あなただけの香りが生まれる。">
 <meta property="og:type" content="website">
 <meta property="og:title" content="龍涎香ドリフト">
@@ -46,7 +46,8 @@
   h1 { font-family:var(--serif); font-size:30px; font-weight:600; letter-spacing:.18em; margin-bottom:6px; }
   h1 .small{ font-size:19px; letter-spacing:.12em; }
   .tag { font-size:11px; letter-spacing:.42em; color:var(--gold); opacity:.85; margin-bottom:14px; text-indent:.42em;}
-  .tagline { font-family:var(--serif); font-size:14px; letter-spacing:.16em; color:var(--ink); opacity:.6; margin:2px 0 14px; }
+  .tagline { font-family:var(--serif); font-size:14px; letter-spacing:.16em; color:var(--ink); opacity:.6; margin:2px 0 10px; }
+  .dailyline { font-size:11.5px; letter-spacing:.06em; color:var(--gold-soft); opacity:.85; margin-bottom:14px; }
   .sub { font-size:13px; opacity:.66; max-width:440px; line-height:1.9; margin-bottom:24px; }
   .btn { pointer-events:auto; cursor:pointer; border:1px solid rgba(217,184,119,.5); border-radius:2px;
          padding:13px 30px; font-size:14px; font-weight:600; letter-spacing:.16em; margin:5px;
@@ -113,14 +114,28 @@
     <div class="tagline">海を漂い、育ち、香りになる</div>
     <div class="essence">熟成エキス &nbsp;<b id="homeEssence">0</b></div>
     <div class="sub" id="homeRegion">海域：黒潮</div>
+    <div id="homeDaily" class="dailyline">今日の海：—</div>
     <div>
       <button class="btn" id="goBtn">漂い出す</button>
     </div>
     <div style="margin-top:6px">
+      <button class="btn ghost" id="dailyBtn">今日の海</button>
+      <button class="btn ghost" id="endlessBtn">エンドレス</button>
+    </div>
+    <div style="margin-top:6px">
       <button class="btn ghost" id="regionBtn">海域</button>
       <button class="btn ghost" id="shopBtn">強化</button>
-      <button class="btn ghost" id="codexBtn">香り図鑑</button>
+      <button class="btn ghost" id="codexBtn">図鑑</button>
+      <button class="btn ghost" id="achBtn">実績</button>
     </div>
+  </div>
+
+  <!-- ACHIEVEMENTS -->
+  <div id="achPanel" class="panel hidden">
+    <h1 class="small">実績</h1>
+    <div class="essence">解除 &nbsp;<b id="achCount">0</b> / <b id="achTotal">0</b></div>
+    <div class="list" id="achList"></div>
+    <button class="btn ghost back" data-home>もどる</button>
   </div>
 
   <!-- REGION -->
@@ -195,9 +210,35 @@ addEventListener('resize',resize); resize();
 
 // ===================== SAVE =====================
 const SAVE_KEY='drift_save_v1';
-function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}, best:{}}; }
+function def(){ return {essence:0, perks:{ring0:0,murkres:0,xp0:0,essence0:0,shield0:0}, regions:['kuroshio'], codex:{}, best:{}, daily:{}, endlessBest:0, ach:{}}; }
 let SAVE; try{ SAVE=Object.assign(def(),JSON.parse(localStorage.getItem(SAVE_KEY))||{}); SAVE.perks=Object.assign(def().perks,SAVE.perks||{}); }catch(e){ SAVE=def(); }
 function save(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(SAVE)); }catch(e){} }
+function fmtTime(t){ const s=Math.floor(t); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
+const DAILY_MODS=[
+  {k:'moon',name:'月夜',desc:'月光が満ちる'},
+  {k:'storm',name:'時化',desc:'汚染が増える'},
+  {k:'bloom',name:'豊穣',desc:'素材が多い'},
+  {k:'calm',name:'凪',desc:'海が穏やか'},
+];
+function todayKey(){ const d=new Date(); return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(); }
+function dailyInfo(){ const key=todayKey(), h=hashNum(key); return {key, region:REGIONS[h%REGIONS.length], mod:DAILY_MODS[(Math.floor(h/7))%DAILY_MODS.length]}; }
+function hashNum(s){ let h=0; for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%100000; return h; }
+const ACHS=[
+  {id:'first',name:'初めての漂着',desc:'はじめて浜へ漂着する',test:c=>c.good},
+  {id:'combo20',name:'連なる潮',desc:'コンボ20を達成',test:c=>c.maxCombo>=20},
+  {id:'combo40',name:'途切れぬ流れ',desc:'コンボ40を達成',test:c=>c.maxCombo>=40},
+  {id:'whale',name:'鯨との邂逅',desc:'鯨の記憶を吸い込む',test:c=>c.whale},
+  {id:'pure',name:'澄みきった海',desc:'濁りゼロで漂着する',test:c=>c.good&&c.murk<1},
+  {id:'star5',name:'五つ星の香り',desc:'★5の香りを生む',test:c=>c.stars>=5},
+  {id:'grown',name:'大熟成',desc:'1回で110個吸収する',test:c=>c.absorbed>=110},
+  {id:'score1500',name:'熟成の極み',desc:'スコア1500に到達',test:c=>c.score>=1500},
+  {id:'endless120',name:'深淵の漂流者',desc:'エンドレスで2分生存',test:c=>c.endless&&c.t>=120},
+  {id:'allregion',name:'七つの海',desc:'全海域を解放する',test:()=>SAVE.regions.length>=REGIONS.length},
+  {id:'codex15',name:'蒐集家',desc:'香りを15種発見する',test:()=>Object.keys(SAVE.codex).length>=15},
+  {id:'maxperk',name:'極めし者',desc:'全強化をMAXにする',test:()=>PERKS.every(p=>(SAVE.perks[p.id]||0)>=p.max)},
+];
+function checkAchievements(c){ SAVE.ach=SAVE.ach||{}; const got=[];
+  ACHS.forEach(a=>{ if(!SAVE.ach[a.id] && a.test(c)){ SAVE.ach[a.id]=1; got.push(a.name); } }); return got; }
 
 // ===================== DATA =====================
 const REGIONS=[
@@ -284,6 +325,7 @@ function newGame(regionId){
     counts:{moon:0,sun:0,weed:0,salt:0,microbe:0,whale:0}, absorbed:0,
     spawnT:0,pollT:0, shake:0, scaleX:1,scaleY:1, bump:0, levelFlash:0, mileIdx:0,
     phase:'play', arriveT:0, introT:2.2, tut:!SAVE.tutDone, seed:Math.floor(Math.random()*997)+1, maxCombo:0,
+    mode:'normal', endless:false, matRate:1, dailyBias:null, dailyKey:null,
     snow:[], rays:[], currents:[], curT:1.5, whaleT:6, whaleShadow:null,
     ended:false };
   for(let i=0;i<70;i++)G.snow.push({x:Math.random()*W,y:Math.random()*H,z:0.3+Math.random()*0.7,ph:Math.random()*6.28});
@@ -299,7 +341,7 @@ function spawnMat(){
   if(Math.random()<0.022){ // rare 鯨の記憶
     const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5), sp=0.14+Math.random()*0.18;
     G.mats.push({type:'whale',x:p.x,y:p.y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,pv:0,pop:0,...MATS.whale}); return; }
-  const base={microbe:0.10,moon:0.22,salt:0.22,weed:0.24,sun:0.22}, bias=G.region.bias||{};
+  const base={microbe:0.10,moon:0.22,salt:0.22,weed:0.24,sun:0.22}, bias=Object.assign({},G.region.bias||{},G.dailyBias||{});
   let tot=0, w={}; for(const k in base){ w[k]=base[k]*(bias[k]||1); tot+=w[k]; }
   let r=Math.random()*tot, k='sun'; for(const key in w){ if(r<w[key]){k=key;break;} r-=w[key]; }
   const p=edgePos(20), ang=Math.atan2(H/2-p.y,W/2-p.x)+(Math.random()-0.5)*1.2, sp=0.2+Math.random()*0.3;
@@ -365,8 +407,8 @@ function update(f,ds){
   if(G.comboT>0){ G.comboT-=ds; if(G.comboT<=0){ G.combo=0; updateCombo(); } }
 
   G.spawnT-=ds; G.pollT-=ds;
-  if(G.spawnT<=0){ spawnMat(); G.spawnT=0.42; }
-  if(G.pollT<=0){ spawnPoll(); G.pollT=Math.max(0.5,1.6-G.t*0.012)/G.pollMul; }
+  if(G.spawnT<=0){ spawnMat(); G.spawnT=0.42/(G.matRate||1); }
+  if(G.pollT<=0){ spawnPoll(); G.pollT=Math.max(G.endless?0.24:0.5,1.6-G.t*0.012)/G.pollMul; }
 
   const pr=G.displayR;
   for(let i=G.mats.length-1;i>=0;i--){ const m=G.mats[i];
@@ -410,8 +452,8 @@ function update(f,ds){
   document.getElementById('xpFill').style.width=(G.xp/G.xpNext*100)+'%';
   document.getElementById('murkFill').style.width=G.murk+'%';
   document.getElementById('murkPct').textContent=Math.round(G.murk)+'%';
-  document.getElementById('clock').textContent=Math.max(0,Math.ceil(TT-G.t))+'"';
-  if(G.murk>=100)endGame(false); else if(G.t>=TT)beginArrival();
+  document.getElementById('clock').textContent=G.endless?fmtTime(G.t):(Math.max(0,Math.ceil(TT-G.t))+'"');
+  if(G.murk>=100)endGame(!!G.endless); else if(!G.endless && G.t>=TT)beginArrival();
 }
 function updateCombo(){ const el=document.getElementById('combo');
   if(G.combo>=3){ el.textContent=G.combo+' COMBO'; el.style.opacity='1'; el.style.transform='scale(1.12)'; setTimeout(()=>el.style.transform='scale(1)',90); }
@@ -639,12 +681,19 @@ function generateScent(good){
 }
 
 // ===================== SCREENS =====================
-const PANELS=['homePanel','regionPanel','shopPanel','codexPanel','detailPanel','upPanel','endPanel'];
+const PANELS=['homePanel','regionPanel','shopPanel','codexPanel','detailPanel','achPanel','upPanel','endPanel'];
 function show(id){ PANELS.forEach(p=>document.getElementById(p).classList.add('hidden')); if(id)document.getElementById(id).classList.remove('hidden'); }
 
 function showHome(){ stopPad(); document.getElementById('homeEssence').textContent=SAVE.essence;
   document.getElementById('homeRegion').textContent='海域：'+rById(selRegion).name;
+  const di=dailyInfo(), db=(SAVE.daily&&SAVE.daily.date===di.key)?SAVE.daily.best:0;
+  document.getElementById('homeDaily').textContent='今日の海：'+di.region.name+'・'+di.mod.name+'（'+di.mod.desc+'）'+(db?'　自己ベスト '+db:'');
   document.getElementById('regionName').textContent=rById(selRegion).name; show('homePanel'); }
+function renderAch(){ SAVE.ach=SAVE.ach||{}; const got=ACHS.filter(a=>SAVE.ach[a.id]).length;
+  document.getElementById('achCount').textContent=got; document.getElementById('achTotal').textContent=ACHS.length;
+  const box=document.getElementById('achList'); box.innerHTML='';
+  ACHS.forEach(a=>{ const on=!!SAVE.ach[a.id]; const d=document.createElement('div'); d.className='card'+(on?'':' locked');
+    d.innerHTML='<div class="ttl">'+(on?'🏅 ':'🔒 ')+a.name+'</div><div class="dsc">'+a.desc+'</div>'; box.appendChild(d); }); }
 
 function renderRegions(){ document.getElementById('regionEssence').textContent=SAVE.essence;
   const box=document.getElementById('regionList'); box.innerHTML='';
@@ -691,29 +740,53 @@ function openDetail(name){ const e=SAVE.codex[name]; if(!e)return; detailName=na
 }
 
 // ===================== START / END =====================
-function startGame(){ initAudio(); newGame(selRegion); startPad(); G.running=true;
-  document.getElementById('regionName').textContent=G.region.name; document.getElementById('lvl').textContent='Lv.1';
+function applyDailyMod(mod){ if(!mod)return;
+  if(mod.k==='moon')G.dailyBias={moon:2.4}; else if(mod.k==='storm')G.pollMul*=1.6;
+  else if(mod.k==='bloom')G.matRate=1.5; else if(mod.k==='calm')G.pollMul*=0.55; }
+let lastMode='normal';
+function startRun(mode){ initAudio(); mode=mode||'normal'; lastMode=mode;
+  let region=selRegion, di=null;
+  if(mode==='daily'){ di=dailyInfo(); region=di.region.id; }
+  newGame(region); G.mode=mode;
+  if(mode==='daily'){ G.region=di.region; G.dailyKey=di.key; applyDailyMod(di.mod); G.introT=2.6; }
+  if(mode==='endless'){ G.endless=true; }
+  startPad(); G.running=true;
+  document.getElementById('regionName').textContent=(mode==='endless'?'深淵 ∞':(mode==='daily'?'今日の海・'+G.region.name:G.region.name));
+  document.getElementById('lvl').textContent='Lv.1';
   show(null); last=performance.now(); requestAnimationFrame(loop); }
+function startGame(){ startRun('normal'); }
 
 let lastScent=null;
 function endGame(good){ if(G.ended)return; G.ended=true; G.running=false; stopPad();
-  const s=generateScent(good); lastScent=s; if(good)sArrive(); else sHit();
   const grade=Math.min(1,G.absorbed/130);
-  const earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4)));
-  SAVE.essence+=earned;
-  const ex=SAVE.codex[s.name]; if(!ex||s.stars>ex.stars) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region,state:s.state,vis:s.vis};
-  // スコア＆海域ベスト記録
-  const score=Math.round(G.absorbed*10 + (G.maxCombo||0)*8 + s.stars*60 + grade*150 + (good?200:0));
-  SAVE.best=SAVE.best||{}; const rid=G.region.id; const isBest=!SAVE.best[rid]||score>SAVE.best[rid]; if(isBest)SAVE.best[rid]=score;
+  const s=generateScent(good); lastScent=s; if(good)sArrive(); else sHit();
+  let score, earned, headline, extra='';
+  if(G.endless){
+    score=Math.round(G.absorbed*10 + (G.maxCombo||0)*8 + Math.floor(G.t)*15 + grade*150);
+    earned=Math.max(1,Math.round(score*0.4*G.essenceMul)); SAVE.essence+=earned;
+    SAVE.endlessBest=SAVE.endlessBest||0; const eb=score>SAVE.endlessBest; if(eb)SAVE.endlessBest=score;
+    headline='深淵の果て';
+    extra='漂流 '+fmtTime(G.t)+'　'+(eb?'<span style="color:#e8d3a4">★自己ベスト</span>　':'')+'自己ベスト '+SAVE.endlessBest;
+  } else {
+    score=Math.round(G.absorbed*10 + (G.maxCombo||0)*8 + s.stars*60 + grade*150 + (good?200:0));
+    earned=Math.max(1,Math.round((G.absorbed*2 + s.stars*15 + grade*45)*G.essenceMul*(good?1:0.4))); SAVE.essence+=earned;
+    SAVE.best=SAVE.best||{}; const rid=G.region.id; const isBest=!SAVE.best[rid]||score>SAVE.best[rid]; if(isBest)SAVE.best[rid]=score;
+    headline=good?'漂着しました':'濁ってしまった…';
+    if(isBest)extra='<span style="color:#e8d3a4">★最高記録</span>　';
+    if(G.mode==='daily'){ SAVE.daily=SAVE.daily||{}; if(SAVE.daily.date!==G.dailyKey)SAVE.daily={date:G.dailyKey,best:0};
+      if(score>SAVE.daily.best)SAVE.daily.best=score; extra+='今日の海ベスト '+SAVE.daily.best+'　'; }
+  }
+  const ex=SAVE.codex[s.name]; if((good||G.endless)&&(!ex||s.stars>ex.stars)) SAVE.codex[s.name]={stars:s.stars,note:s.note,place:s.place,region:s.region,state:s.state,vis:s.vis};
   const rank = score>=1600?'龍涎香の達人': score>=1000?'熟成師': score>=500?'漂流者':'見習い';
+  const got=checkAchievements({good:good&&!G.endless,stars:s.stars,maxCombo:G.maxCombo||0,whale:(G.counts.whale||0)>0,murk:G.murk,absorbed:G.absorbed,grade,score,endless:!!G.endless,t:G.t});
   SAVE.tutDone=1; save();
-  document.getElementById('endTitle').textContent=good?'漂着しました':'濁ってしまった…';
+  document.getElementById('endTitle').textContent=headline;
   document.getElementById('sName').textContent=s.name;
   document.getElementById('sStars').textContent='★'.repeat(s.stars)+'☆'.repeat(5-s.stars);
   document.getElementById('sNote').textContent='ノート：'+s.note;
   document.getElementById('sPlace').textContent='漂着地：'+s.place+'（'+s.region+'）';
   document.getElementById('sState').textContent='状態：'+s.state;
-  document.getElementById('earned').innerHTML='熟成エキス +'+earned+'　／　スコア <b style="color:#fff">'+score+'</b>'+(isBest?' <span style="color:#e8d3a4">★最高記録</span>':'')+'　［'+rank+'］<br>最高コンボ '+(G.maxCombo||0)+'　所持エキス '+SAVE.essence;
+  document.getElementById('earned').innerHTML='エキス +'+earned+'　／　スコア <b style="color:#fff">'+score+'</b>　［'+rank+'］<br>'+extra+'最高コンボ '+(G.maxCombo||0)+'　所持 '+SAVE.essence+(got.length?'<br><span style="color:#e8d3a4">実績解除：'+got.join('・')+'</span>':'');
   show('endPanel');
 }
 
@@ -743,12 +816,15 @@ function wrap(x,text,cx,cy,maxW,lh){ const ch=[...text]; let line='',y=cy,lines=
   const start=cy-(lines.length-1)*lh/2; lines.forEach((l,i)=>x.fillText(l,cx,start+i*lh)); }
 
 // ===================== WIRING =====================
-document.getElementById('goBtn').onclick=startGame;
-document.getElementById('againBtn').onclick=startGame;
+document.getElementById('goBtn').onclick=()=>startRun('normal');
+document.getElementById('dailyBtn').onclick=()=>startRun('daily');
+document.getElementById('endlessBtn').onclick=()=>startRun('endless');
+document.getElementById('againBtn').onclick=()=>startRun(lastMode);
 document.getElementById('homeBtn2').onclick=showHome;
 document.getElementById('regionBtn').onclick=()=>{ renderRegions(); show('regionPanel'); };
 document.getElementById('shopBtn').onclick=()=>{ renderShop(); show('shopPanel'); };
 document.getElementById('codexBtn').onclick=()=>{ renderCodex(); show('codexPanel'); };
+document.getElementById('achBtn').onclick=()=>{ renderAch(); show('achPanel'); };
 document.querySelectorAll('[data-home]').forEach(b=>b.onclick=showHome);
 function downloadShare(s){ const url=drawShare(s); const a=document.createElement('a'); a.href=url; a.download='龍涎香_'+s.name+'.png'; document.body.appendChild(a); a.click(); a.remove(); }
 document.getElementById('shareBtn').onclick=()=>{ if(lastScent)downloadShare(lastScent); };
